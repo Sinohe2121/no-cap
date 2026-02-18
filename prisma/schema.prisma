@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── App Users (Admin / Viewer) ─────────────────────────────────
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("VIEWER") // ADMIN | VIEWER
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Developers / FTEs ──────────────────────────────────────────
+model Developer {
+  id                   String       @id @default(cuid())
+  name                 String
+  email                String       @unique
+  jiraUserId           String       @unique
+  role                 String       // ENG | PRODUCT | DESIGN
+  monthlySalary        Float        @default(0)
+  fringeBenefitRate    Float        @default(0.25)  // multiplier on salary
+  stockCompAllocation  Float        @default(0)     // monthly stock comp
+  isActive             Boolean      @default(true)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  tickets              JiraTicket[]
+  payrollEntries       PayrollEntry[]
+}
+
+// ─── Payroll Imports (Pay Period Snapshots) ──────────────────
+model PayrollImport {
+  id        String   @id @default(cuid())
+  label     String               // e.g. "Jan 15"
+  payDate   DateTime             // the actual pay date
+  year      Int
+  createdAt DateTime @default(now())
+
+  entries   PayrollEntry[]
+
+  @@unique([payDate])
+}
+
+model PayrollEntry {
+  id              String   @id @default(cuid())
+  grossSalary     Float
+  createdAt       DateTime @default(now())
+
+  developerId     String
+  developer       Developer      @relation(fields: [developerId], references: [id])
+
+  payrollImportId String
+  payrollImport   PayrollImport  @relation(fields: [payrollImportId], references: [id], onDelete: Cascade)
+
+  @@unique([developerId, payrollImportId])
+  @@index([developerId])
+  @@index([payrollImportId])
+}
+
+// ─── Projects (The Capitalizable Asset) ─────────────────────────
+model Project {
+  id                    String         @id @default(cuid())
+  name                  String
+  description           String?
+  epicKey               String         @unique    // maps to Jira Epic key
+  status                String         @default("PLANNING") // PLANNING | DEV | LIVE | RETIRED
+  isCapitalizable       Boolean        @default(true)
+  amortizationMonths    Int            @default(36)
+  accumulatedCost       Float          @default(0)
+  startingBalance       Float          @default(0) // legacy pre-app cost
+  startingAmortization  Float          @default(0) // legacy accum amort
+  startDate             DateTime?
+  launchDate            DateTime?      // GA date — amort starts month after
+  overrideReason        String?        // admin justification
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  tickets               JiraTicket[]
+  journalEntries        JournalEntry[]
+}
+
+// ─── Jira Tickets (Imported Activity) ───────────────────────────
+model JiraTicket {
+  id              String    @id @default(cuid())
+  ticketId        String    @unique        // e.g. "PROJ-123"
+  epicKey         String                    // links to Project.epicKey
+  issueType       String                    // STORY | BUG | TASK
+  summary         String
+  storyPoints     Float     @default(0)
+  resolutionDate  DateTime?
+  fixVersion      String?
+  createdAt       DateTime  @default(now())
+
+  assigneeId      String
+  assignee        Developer @relation(fields: [assigneeId], references: [id])
+
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id])
+
+  auditTrails     AuditTrail[]
+
+  @@index([assigneeId])
+  @@index([projectId])
+  @@index([epicKey])
+}
+
+// ─── Accounting Periods ─────────────────────────────────────────
+model AccountingPeriod {
+  id                String         @id @default(cuid())
+  month             Int            // 1-12
+  year              Int
+  status            String         @default("OPEN") // OPEN | CLOSED
+  totalCapitalized  Float          @default(0)
+  totalExpensed     Float          @default(0)
+  totalAmortization Float          @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  journalEntries    JournalEntry[]
+
+  @@unique([month, year])
+}
+
+// ─── Journal Entries ────────────────────────────────────────────
+model JournalEntry {
+  id            String   @id @default(cuid())
+  entryType     String   // CAPITALIZATION | AMORTIZATION | EXPENSE
+  debitAccount  String
+  creditAccount String
+  amount        Float
+  description   String?
+  createdAt     DateTime @default(now())
+
+  periodId      String
+  period        AccountingPeriod @relation(fields: [periodId], references: [id])
+
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id])
+
+  auditTrails   AuditTrail[]
+
+  @@index([periodId])
+  @@index([projectId])
+}
+
+// ─── Audit Trail ────────────────────────────────────────────────
+model AuditTrail {
+  id              String   @id @default(cuid())
+  allocatedAmount Float
+  developerName   String
+  ticketId        String   // display reference
+  createdAt       DateTime @default(now())
+
+  journalEntryId  String
+  journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+
+  jiraTicketId    String
+  jiraTicket      JiraTicket   @relation(fields: [jiraTicketId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([jiraTicketId])
+}
+
+// ─── Global Configuration ───────────────────────────────────────
+model GlobalConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  label String // human-readable label
+}
