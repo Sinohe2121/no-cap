@@ -34,7 +34,6 @@ export async function GET() {
                 ytdAmortization += amort.totalAmortization - p.startingAmortization;
             } else if (p.launchDate) {
                 // For all live projects, add current year's amortization
-                const startOfYear = new Date(now.getFullYear(), 0, 1);
                 const monthsThisYear = now.getMonth() + 1;
                 ytdAmortization += amort.monthlyAmortization * Math.min(monthsThisYear, amort.monthsElapsed);
             }

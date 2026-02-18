@@ -24,12 +24,12 @@ function formatCurrency(amount: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
     if (!active || !payload) return null;
     return (
         <div style={{ background: '#FFFFFF', border: '1px solid #E2E4E9', borderRadius: 10, padding: 12, minWidth: 180 }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: '#3F4450', marginBottom: 8 }}>{label}</p>
-            {payload.map((entry: any, i: number) => (
+            {payload.map((entry: { color: string; name: string; value: number }, i: number) => (
                 <div key={i} className="flex justify-between items-center gap-4" style={{ fontSize: 12 }}>
                     <span style={{ color: entry.color, fontWeight: 500 }}>{entry.name}</span>
                     <span style={{ color: '#3F4450', fontWeight: 600 }}>{formatCurrency(entry.value)}</span>

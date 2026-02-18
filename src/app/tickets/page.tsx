@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Ticket, Search, X, Filter } from 'lucide-react';
+import { Search, X, Filter } from 'lucide-react';
 
 interface TicketData {
     id: string;
