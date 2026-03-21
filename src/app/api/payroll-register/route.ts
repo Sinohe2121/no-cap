@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 interface EntryRow {
     developerId: string;
     grossSalary: number;
+    sbcAmount: number;
 }
 
 interface ImportWithEntries {
@@ -11,6 +12,7 @@ interface ImportWithEntries {
     label: string;
     payDate: Date;
     year: number;
+    fringeBenefitRate: number;
     createdAt: Date;
     entries: EntryRow[];
 }
@@ -33,20 +35,22 @@ export async function GET() {
         const payrollImports: ImportWithEntries[] = await prisma.payrollImport.findMany({
             orderBy: { payDate: 'asc' },
             include: {
-                entries: { select: { developerId: true, grossSalary: true } },
+                entries: { select: { developerId: true, grossSalary: true, sbcAmount: true } },
             },
         });
 
-        // dev → { importId → gross }
-        const salaryMap: Record<string, Record<string, number>> = {};
+        // dev → { importId → totalCost (salary + fringe + sbc) }
+        const costMap: Record<string, Record<string, number>> = {};
         for (const dev of developers) {
-            salaryMap[dev.id] = {};
+            costMap[dev.id] = {};
         }
 
         for (const imp of payrollImports) {
+            const rate = imp.fringeBenefitRate ?? 0;
             for (const entry of imp.entries) {
-                if (salaryMap[entry.developerId]) {
-                    salaryMap[entry.developerId][imp.id] = entry.grossSalary;
+                if (costMap[entry.developerId]) {
+                    const totalCost = entry.grossSalary + (entry.grossSalary * rate) + (entry.sbcAmount || 0);
+                    costMap[entry.developerId][imp.id] = totalCost;
                 }
             }
         }
@@ -54,13 +58,16 @@ export async function GET() {
         // Column totals
         const importTotals: Record<string, number> = {};
         for (const imp of payrollImports) {
-            importTotals[imp.id] = imp.entries.reduce((s: number, e: EntryRow) => s + e.grossSalary, 0);
+            const rate = imp.fringeBenefitRate ?? 0;
+            importTotals[imp.id] = imp.entries.reduce((s: number, e: EntryRow) => {
+                return s + e.grossSalary + (e.grossSalary * rate) + (e.sbcAmount || 0);
+            }, 0);
         }
 
         // Row totals
         const devTotals: Record<string, number> = {};
         for (const dev of developers) {
-            devTotals[dev.id] = Object.values(salaryMap[dev.id]).reduce((s, v) => s + v, 0);
+            devTotals[dev.id] = Object.values(costMap[dev.id]).reduce((s, v) => s + v, 0);
         }
 
         const grandTotal = Object.values(devTotals).reduce((s, v) => s + v, 0);
@@ -76,7 +83,7 @@ export async function GET() {
                 payDate: p.payDate,
                 year: p.year,
             })),
-            salaryMap,
+            salaryMap: costMap,
             importTotals,
             devTotals,
             grandTotal,

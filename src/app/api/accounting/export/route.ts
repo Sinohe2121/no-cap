@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { calculateAmortization } from '@/lib/calculations';
+import { sanitizeCSVCell } from '@/lib/apiError';
+import { ENTRY_TYPES } from '@/lib/constants';
 
 export async function GET(request: Request) {
     try {
@@ -96,7 +98,7 @@ export async function GET(request: Request) {
             }
 
             // Supporting detail: amortization schedule
-            if (entry.entryType === 'AMORTIZATION' && entry.project.launchDate) {
+            if (entry.entryType === ENTRY_TYPES.AMORTIZATION && entry.project.launchDate) {
                 const amort = calculateAmortization(
                     entry.project.accumulatedCost,
                     entry.project.startingBalance,
@@ -141,15 +143,8 @@ export async function GET(request: Request) {
             '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
         ]);
 
-        // Build CSV string
-        const escapeCSV = (val: string) => {
-            if (val.includes(',') || val.includes('"') || val.includes('\n')) {
-                return `"${val.replace(/"/g, '""')}"`;
-            }
-            return val;
-        };
-
-        const csv = rows.map(row => row.map(escapeCSV).join(',')).join('\n');
+        // Build CSV string — uses sanitizeCSVCell to prevent formula injection (S10)
+        const csv = rows.map(row => row.map(sanitizeCSVCell).join(',')).join('\n');
 
         return new Response(csv, {
             headers: {

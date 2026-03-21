@@ -1,0 +1,305 @@
+.pageWrapper {
+}
+
+/* ─── Header ───────────────────────────────────────────────────── */
+.backLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-bottom: 8px;
+    transition: color 0.2s ease;
+}
+
+.backLink:hover {
+    color: var(--gem);
+}
+
+.headerRow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.ticketIdBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gem);
+    background: var(--tint-accent);
+    padding: 4px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.summaryText {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.35;
+}
+
+.metaRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.typeBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.metaDot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--carbon-30);
+}
+
+.metaLabel {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ─── Info Cards ───────────────────────────────────────────────── */
+.cardsRow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.infoCard {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.infoCard:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 4px 16px rgba(63, 68, 80, 0.08);
+}
+
+.infoCard::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.infoCard[data-accent="gem"]::before {
+    background: var(--gem);
+}
+
+.infoCard[data-accent="cilantro"]::before {
+    background: var(--cilantro);
+}
+
+.infoCard[data-accent="red"]::before {
+    background: var(--red);
+}
+
+.cardLabel {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.cardValue {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.cardSub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* ─── Amortization Table ─────────────────────────────────────── */
+.tableSection {
+    margin-top: 8px;
+}
+
+.sectionTitle {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+.tableWrapper {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.amortTable {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.amortTable thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.amortTable thead th:not(:first-child) {
+    text-align: right;
+}
+
+.amortTable tbody tr {
+    transition: background 0.15s ease;
+}
+
+.amortTable tbody tr:hover {
+    background: var(--arctic);
+}
+
+.amortTable tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.amortTable tbody td:not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.amortTable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.currentRow {
+    background: rgba(65, 65, 162, 0.04);
+}
+
+.currentRow td:first-child {
+    font-weight: 700;
+    color: var(--gem);
+}
+
+.currentBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gem);
+    background: var(--tint-accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+}
+
+.emptyAmort {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.emptyAmort p:first-child {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+/* ─── Audit Trail ────────────────────────────────────────────── */
+.auditSection {
+    margin-top: 32px;
+}
+
+.auditCards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.auditCard {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    transition: border-color 0.2s ease;
+}
+
+.auditCard:hover {
+    border-color: var(--border-hover);
+}
+
+.auditPeriod {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.auditAmount {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.auditDev {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* ─── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .cardsRow {
+        grid-template-columns: 1fr;
+    }
+
+    .headerRow {
+        flex-direction: column;
+    }
+}

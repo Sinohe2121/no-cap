@@ -26,7 +26,7 @@ export async function GET(
         }
 
         // Get unique developers for this project
-        const devIds = Array.from(new Set(project.tickets.map((t: { assigneeId: string }) => t.assigneeId)));
+        const devIds = Array.from(new Set(project.tickets.filter((t) => t.assigneeId).map((t) => t.assigneeId as string)));
         const developers = await prisma.developer.findMany({
             where: { id: { in: devIds } },
         });

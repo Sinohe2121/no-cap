@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import ClientLayout from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
   title: "No Cap — Software Capitalization Manager",
@@ -14,11 +14,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
-        <Sidebar />
-        <main className="main-content">
-          {children}
-        </main>
+      <body style={{ display: 'flex', flexDirection: 'row' }}>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

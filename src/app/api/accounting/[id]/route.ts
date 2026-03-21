@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { calculateAmortization } from '@/lib/calculations';
+import { ENTRY_TYPES } from '@/lib/constants';
 
 export async function GET(
     request: Request,
@@ -37,7 +38,7 @@ export async function GET(
         };
 
         // For amortization, add schedule details
-        if (entry.entryType === 'AMORTIZATION') {
+        if (entry.entryType === ENTRY_TYPES.AMORTIZATION) {
             const project = entry.project;
             if (project.launchDate) {
                 const amort = calculateAmortization(
@@ -64,7 +65,7 @@ export async function GET(
         }
 
         // For capitalization or expense, get developer cost breakdown
-        if (entry.entryType === 'CAPITALIZATION' || entry.entryType === 'EXPENSE') {
+        if (entry.entryType === ENTRY_TYPES.CAPITALIZATION || entry.entryType === ENTRY_TYPES.EXPENSE) {
             // Summarize by developer from audit trails
             const devSummary: Record<string, { name: string; ticketCount: number; totalPoints: number; totalAmount: number }> = {};
             for (const trail of entry.auditTrails) {

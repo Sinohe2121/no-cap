@@ -66,7 +66,7 @@ export default function ReportPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
-                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#FA4338', borderTopColor: 'transparent' }} />
+                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
             </div>
         );
     }
@@ -75,8 +75,8 @@ export default function ReportPage() {
         return (
             <div className="text-center py-20">
                 <p className="text-sm" style={{ color: '#A4A9B6' }}>No data available for this report.</p>
-                <Link href="/dashboard" className="btn-ghost text-xs mt-4 inline-flex items-center gap-1">
-                    <ArrowLeft className="w-3 h-3" /> Back to Dashboard
+                <Link href="/reports" className="btn-ghost text-xs mt-4 inline-flex items-center gap-1">
+                    <ArrowLeft className="w-3 h-3" /> Back to Reports
                 </Link>
             </div>
         );
@@ -90,8 +90,8 @@ export default function ReportPage() {
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <Link href="/dashboard" className="text-xs flex items-center gap-1 mb-2" style={{ color: '#A4A9B6', textDecoration: 'none' }}>
-                        <ArrowLeft className="w-3 h-3" /> Dashboard
+                    <Link href="/reports" className="text-xs flex items-center gap-1 mb-2" style={{ color: '#A4A9B6', textDecoration: 'none' }}>
+                        <ArrowLeft className="w-3 h-3" /> Back to Reports
                     </Link>
                     <h1 className="section-header flex items-center gap-2">
                         <Icon className="w-5 h-5" style={{ color: accent }} />
@@ -102,7 +102,7 @@ export default function ReportPage() {
                 <div style={{
                     background: '#FFFFFF',
                     border: '1px solid #E2E4E9',
-                    borderRadius: 14,
+                    borderRadius: 10,
                     padding: '16px 28px',
                     textAlign: 'right',
                 }}>

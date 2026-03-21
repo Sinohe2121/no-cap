@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Ticket, Bug, CheckSquare, ListTodo, Search, X } from 'lucide-react';
 
@@ -57,6 +57,7 @@ const issueTypeConfig: Record<string, { icon: typeof Ticket; bg: string; color: 
 
 export default function ProjectTicketsPage() {
     const params = useParams();
+    const router = useRouter();
     const projectId = params.id as string;
     const [data, setData] = useState<TicketData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -74,7 +75,7 @@ export default function ProjectTicketsPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
-                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#FA4338', borderTopColor: 'transparent' }} />
+                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
             </div>
         );
     }
@@ -144,17 +145,31 @@ export default function ProjectTicketsPage() {
             <div className="glass-card p-4 mb-4">
                 <div className="flex items-center gap-4">
                     {/* Search */}
-                    <div className="relative flex-1 max-w-xs">
-                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#A4A9B6' }} />
+                    <div style={{ position: 'relative', flex: 1, maxWidth: 280 }}>
+                        <Search
+                            className="w-3.5 h-3.5"
+                            style={{
+                                position: 'absolute',
+                                left: 12,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                color: '#A4A9B6',
+                                pointerEvents: 'none',
+                            }}
+                        />
                         <input
                             type="text"
                             placeholder="Search tickets..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="form-input pl-9 text-xs"
+                            className="form-input text-xs"
+                            style={{ paddingLeft: 36, paddingRight: searchQuery ? 32 : 14 }}
                         />
                         {searchQuery && (
-                            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: '#A4A9B6' }}>
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#A4A9B6' }}
+                            >
                                 <X className="w-3 h-3" />
                             </button>
                         )}
@@ -212,7 +227,7 @@ export default function ProjectTicketsPage() {
                             const cfg = issueTypeConfig[ticket.issueType] || issueTypeConfig.TASK;
                             const Icon = cfg.icon;
                             return (
-                                <tr key={ticket.id}>
+                                <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)} style={{ cursor: 'pointer' }}>
                                     <td>
                                         <span className="text-xs font-mono font-semibold" style={{ color: '#4141A2' }}>
                                             {ticket.ticketId}

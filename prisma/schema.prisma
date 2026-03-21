@@ -38,20 +38,23 @@ model Developer {
 
 // ─── Payroll Imports (Pay Period Snapshots) ──────────────────
 model PayrollImport {
-  id        String   @id @default(cuid())
-  label     String               // e.g. "Jan 15"
-  payDate   DateTime             // the actual pay date
-  year      Int
-  createdAt DateTime @default(now())
+  id               String   @id @default(cuid())
+  label            String               // e.g. "Jan 15"
+  payDate          DateTime             // the actual pay date
+  year             Int
+  fringeBenefitRate Float   @default(0.25)  // locked at import time from GlobalConfig
+  createdAt        DateTime @default(now())
 
   entries   PayrollEntry[]
 
   @@unique([payDate])
+  @@index([payDate])
 }
 
 model PayrollEntry {
   id              String   @id @default(cuid())
   grossSalary     Float
+  sbcAmount       Float    @default(0)  // Stock-Based Compensation for this period
   createdAt       DateTime @default(now())
 
   developerId     String
@@ -80,11 +83,15 @@ model Project {
   startDate             DateTime?
   launchDate            DateTime?      // GA date — amort starts month after
   overrideReason        String?        // admin justification
+  mgmtAuthorized        Boolean        @default(false)  // ASU 2025-06: management sign-off
+  probableToComplete    Boolean        @default(false)  // ASU 2025-06: probable to complete
+  budgetTarget          Float?         // monthly R&D budget target (for Budget vs. Actuals)
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
   tickets               JiraTicket[]
   journalEntries        JournalEntry[]
+  amortOverrides        AmortizationOverride[]
 }
 
 // ─── Jira Tickets (Imported Activity) ───────────────────────────
@@ -97,19 +104,27 @@ model JiraTicket {
   storyPoints     Float     @default(0)
   resolutionDate  DateTime?
   fixVersion      String?
+  customFields    Json?     // stores dynamic extra columns requested by the user
+  importPeriod    String?   // e.g. "February 2026" — the accounting period this ticket was imported for
+  capitalizedAmount   Float     @default(0)  // total $ capitalized on this ticket (accumulates across periods while open)
+  amortizationMonths  Int       @default(36) // useful life inherited from project at cap time
+  firstCapitalizedDate DateTime? // when this ticket first started accumulating capitalized cost
   createdAt       DateTime  @default(now())
 
-  assigneeId      String
-  assignee        Developer @relation(fields: [assigneeId], references: [id])
+  assigneeId      String?
+  assignee        Developer? @relation(fields: [assigneeId], references: [id])
 
-  projectId       String
-  project         Project   @relation(fields: [projectId], references: [id])
+  projectId       String?
+  project         Project?   @relation(fields: [projectId], references: [id])
 
   auditTrails     AuditTrail[]
 
   @@index([assigneeId])
   @@index([projectId])
   @@index([epicKey])
+  @@index([resolutionDate])
+  @@index([issueType])
+  @@index([capitalizedAmount])
 }
 
 // ─── Accounting Periods ─────────────────────────────────────────
@@ -149,6 +164,7 @@ model JournalEntry {
 
   @@index([periodId])
   @@index([projectId])
+  @@index([entryType])
 }
 
 // ─── Audit Trail ────────────────────────────────────────────────
@@ -175,4 +191,122 @@ model GlobalConfig {
   key   String @unique
   value String
   label String // human-readable label
+}
+
+// ─── GitHub Integration ─────────────────────────────────────────
+model GitHubRepo {
+  id        String   @id @default(cuid())
+  owner     String                    // GitHub org or username
+  name      String                    // repo name
+  projectId String?                   // mapped project (null = unassigned)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  events    GitHubEvent[]
+
+  @@unique([owner, name])
+}
+
+model GitHubEvent {
+  id             String    @id @default(cuid())
+  eventType      String                // PR | COMMIT
+  githubId       String    @unique     // PR number or commit SHA (prefixed with repo)
+  repoOwner      String
+  repoName       String
+  title          String
+  author         String
+  url            String?
+  mergedAt       DateTime?
+  classification String?               // CAPITALIZE | EXPENSE | UNCLASSIFIED
+  projectId      String?               // matched project
+  repoId         String?
+  repo           GitHubRepo? @relation(fields: [repoId], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([repoOwner, repoName])
+  @@index([classification])
+}
+
+// ─── SOC 2 Type II Readiness ─────────────────────────────────────
+
+// Control Library — one row per control across TSC criteria
+model Soc2Control {
+  id          String   @id @default(cuid())
+  criterion   String   // CC6 | CC7 | CC2 | A1 | CC3
+  controlId   String   @unique  // e.g. "CC6.1"
+  title       String
+  description String
+  owner       String?  // team/person responsible
+  frequency   String   @default("ANNUAL") // ANNUAL | QUARTERLY | MONTHLY | CONTINUOUS
+  status      String   @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLIANT | AT_RISK
+  dueDate     DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  evidence    Soc2Evidence[]
+}
+
+// Evidence Items — each piece of documentation/proof for a control
+model Soc2Evidence {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  url         String?  // link to doc, ticket, PR, etc
+  reviewer    String?  // who verified this evidence
+  reviewedAt  DateTime?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  controlId   String
+  control     Soc2Control @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  @@index([controlId])
+}
+
+// Risk Register — likelihood × impact risk matrix
+model Soc2RiskItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  criterion   String?  // which TSC/trust service area this risk touches
+  likelihood  Int      @default(2)  // 1-4: Rare | Unlikely | Possible | Likely
+  impact      Int      @default(2)  // 1-4: Low | Medium | High | Critical
+  owner       String?
+  mitigation  String?
+  status      String   @default("OPEN") // OPEN | MITIGATED | ACCEPTED | CLOSED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Incident / Availability Log — for A1 availability criterion
+model Soc2IncidentLog {
+  id           String   @id @default(cuid())
+  title        String
+  incidentType String   @default("AVAILABILITY") // AVAILABILITY | SECURITY | CONFIDENTIALITY
+  severity     String   @default("LOW")  // LOW | MEDIUM | HIGH | CRITICAL
+  occurredAt   DateTime
+  resolvedAt   DateTime?
+  durationMins Int?     // downtime in minutes
+  description  String?
+  rootCause    String?
+  remediation  String?
+  reportedBy   String?
+  isResolved   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Amortization Overrides (User-Edited Schedule Rows) ─────────
+model AmortizationOverride {
+  id        String  @id @default(cuid())
+  projectId String
+  month     Int     // 1-12
+  year      Int     // e.g. 2025
+  charge    Float   // user-set monthly amortization charge
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month, year])
+  @@index([projectId])
 }

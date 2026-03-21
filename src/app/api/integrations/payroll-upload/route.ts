@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { PayrollUploadSchema, formatZodError } from '@/lib/validations';
 
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { data } = body; // Array of { name, email, monthlySalary, stockCompAllocation }
+        const auth = await requireAdmin(request);
+        if (auth instanceof NextResponse) return auth;
 
-        if (!Array.isArray(data) || data.length === 0) {
-            return NextResponse.json({ error: 'No data provided' }, { status: 400 });
+        const raw = await request.json();
+        const parsed = PayrollUploadSchema.safeParse(raw);
+        if (!parsed.success) {
+            return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
         }
+        const { data } = parsed.data;
 
         let updated = 0;
         for (const row of data) {
@@ -17,8 +22,8 @@ export async function POST(request: Request) {
                 await prisma.developer.update({
                     where: { email: row.email },
                     data: {
-                        ...(row.monthlySalary && { monthlySalary: parseFloat(row.monthlySalary) }),
-                        ...(row.stockCompAllocation && { stockCompAllocation: parseFloat(row.stockCompAllocation) }),
+                        ...(row.monthlySalary && { monthlySalary: row.monthlySalary }),
+                        ...(row.stockCompAllocation && { stockCompAllocation: row.stockCompAllocation }),
                         ...(row.name && { name: row.name }),
                     },
                 });
