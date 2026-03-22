@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
-import { calculatePeriodCosts, calculateTicketAmortization } from '@/lib/calculations';
+import { calculatePeriodCosts, calculateTicketAmortization, calculateAmortization } from '@/lib/calculations';
 import { ACCOUNTS, PERIOD_STATUSES, ENTRY_TYPES, ISSUE_TYPES } from '@/lib/constants';
 import { UpdatePeriodStatusSchema, GenerateEntriesSchema, formatZodError } from '@/lib/validations';
 
@@ -386,6 +386,46 @@ export async function POST(request: Request) {
                         })),
                     });
                 }
+            }
+        }
+        // ─── STEP 5: Legacy / project-level amortization ─────────────────
+        // Projects with startingBalance (legacy assets) that amortize at the
+        // project level rather than ticket level.
+        const legacyProjects = await prisma.project.findMany({
+            where: {
+                startingBalance: { gt: 0 },
+                launchDate: { not: null },
+                amortizationMonths: { gt: 0 },
+            },
+        });
+
+        for (const project of legacyProjects) {
+            // Skip if this project already had ticket-level amort entries
+            if (projectAmortCharges[project.id]) continue;
+
+            const amort = calculateAmortization(
+                project.accumulatedCost,
+                project.startingBalance,
+                project.startingAmortization,
+                project.amortizationMonths,
+                project.launchDate,
+                asOfDate,
+            );
+
+            if (amort.monthlyAmortization > 0 && amort.netBookValue > 0) {
+                totalAmortization += amort.monthlyAmortization;
+
+                await prisma.journalEntry.create({
+                    data: {
+                        entryType: ENTRY_TYPES.AMORTIZATION,
+                        debitAccount: ACCOUNTS.AMORTIZATION_EXPENSE,
+                        creditAccount: ACCOUNTS.ACCUMULATED_AMORT,
+                        amount: amort.monthlyAmortization,
+                        description: `Monthly amortization for ${project.name} (legacy asset)`,
+                        periodId: period.id,
+                        projectId: project.id,
+                    },
+                });
             }
         }
 
