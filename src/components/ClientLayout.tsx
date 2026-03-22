@@ -1,13 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Sidebar, { SIDEBAR_EXPANDED, SIDEBAR_COLLAPSED } from '@/components/Sidebar';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { PeriodProvider } from '@/context/PeriodContext';
 
+const AUTH_ROUTES = ['/login', '/api/auth'];
+
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
+    const isAuthPage = AUTH_ROUTES.some(r => pathname.startsWith(r));
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const marginLeft = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+
+    if (isAuthPage) {
+        return <>{children}</>;
+    }
 
     return (
         <PeriodProvider>
