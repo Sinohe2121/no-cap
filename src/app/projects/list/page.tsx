@@ -167,7 +167,6 @@ export default function ProjectsPage() {
                     <thead>
                         <tr>
                             <th>Project</th>
-                            <th>Epic</th>
                             <th>Status</th>
                             <th>Treatment</th>
                             <th className="text-right">Capitalized</th>
@@ -185,9 +184,6 @@ export default function ProjectsPage() {
                                         <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>{project.name}</p>
                                         <p className="text-xs mt-0.5" style={{ color: '#A4A9B6' }}>{project.description}</p>
                                     </div>
-                                </td>
-                                <td>
-                                    <span className="text-xs font-mono" style={{ color: '#4141A2' }}>{project.epicKey}</span>
                                 </td>
                                 <td>
                                     <div className="relative">
@@ -238,7 +234,7 @@ export default function ProjectsPage() {
                                 </td>
                                 <td className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <Badge className="text-[10px]" style={{ background: '#EBF5EF', color: '#21944E' }}>{project.storyPoints} SP</Badge>
+                                        <Badge className="text-[10px]" style={{ background: '#EBF5EF', color: '#21944E' }}>{Number.isInteger(project.storyPoints) ? project.storyPoints.toFixed(1) : project.storyPoints.toFixed(1)} SP</Badge>
                                         <Badge className="text-[10px]" style={{ background: '#FFF5F5', color: '#FA4338' }}>{project.bugCount} bugs</Badge>
                                     </div>
                                 </td>
