@@ -246,7 +246,7 @@ export default function ProjectTicketsPage() {
                             {data.legacyChildren.map((legacy) => {
                                 const nbv = Math.max(0, legacy.startingBalance - legacy.startingAmortization);
                                 return (
-                                    <tr key={legacy.id}>
+                                    <tr key={legacy.id} onClick={() => router.push(`/projects/${legacy.id}`)} style={{ cursor: 'pointer' }} className="hover:bg-gray-50 transition-colors">
                                         <td>
                                             <div className="flex items-center gap-2">
                                                 <Calendar className="w-3.5 h-3.5" style={{ color: '#4141A2' }} />
