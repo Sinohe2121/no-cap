@@ -33,11 +33,13 @@ export default function LoginPage() {
 
     return (
         <div style={{
-            minHeight: '100vh',
+            position: 'fixed',
+            inset: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             background: '#F6F6F9',
+            zIndex: 50,
         }}>
             <div style={{
                 width: '100%',
