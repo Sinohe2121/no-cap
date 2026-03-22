@@ -155,6 +155,20 @@ export async function GET(request: Request) {
             return { ...p, derivedCost, totalCostForProject };
         });
 
+        // Roll linked legacy startingBalance into parent project totals
+        const parentBonus: Record<string, number> = {};
+        for (const p of projectsWithCosts) {
+            if ((p as any).parentProjectId) {
+                const pid = (p as any).parentProjectId as string;
+                parentBonus[pid] = (parentBonus[pid] || 0) + p.totalCostForProject;
+            }
+        }
+        for (const p of projectsWithCosts) {
+            if (parentBonus[p.id]) {
+                p.totalCostForProject += parentBonus[p.id];
+            }
+        }
+
         // ── Add legacy starting balances to summary totals ──
         let legacyCapitalized = 0;
         let legacyAmortization = 0;
@@ -165,8 +179,9 @@ export async function GET(request: Request) {
 
         const activeDeveloperCount = developers.length;
 
+        // Exclude linked legacies from top projects (their cost is rolled into parent)
         const topProjects = projectsWithCosts
-            .filter((p) => p.isCapitalizable && p.totalCostForProject > 0)
+            .filter((p) => p.isCapitalizable && p.totalCostForProject > 0 && !(p as any).parentProjectId)
             .sort((a, b) => b.totalCostForProject - a.totalCostForProject)
             .slice(0, 5);
 
