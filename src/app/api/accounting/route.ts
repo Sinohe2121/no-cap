@@ -395,11 +395,25 @@ export async function POST(request: Request) {
             data: { totalCapitalized, totalExpensed, totalAmortization },
         });
 
+        // Fetch the newly created entries for the variance comparison
+        const newEntries = await prisma.journalEntry.findMany({
+            where: { periodId: period.id },
+            include: { project: { select: { id: true, name: true } } },
+            orderBy: { entryType: 'asc' },
+        });
+
         return NextResponse.json({
             message: 'Journal entries generated',
             totalCapitalized,
             totalExpensed,
             totalAmortization,
+            entries: newEntries.map(e => ({
+                entryType: e.entryType,
+                amount: e.amount,
+                projectName: e.project?.name || 'Unknown',
+                projectId: e.projectId,
+                description: e.description,
+            })),
         });
     } catch (error) {
         return handleApiError(error, 'Failed to generate journal entries');

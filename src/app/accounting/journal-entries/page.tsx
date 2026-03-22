@@ -81,6 +81,21 @@ interface PayrollAuditData {
     year: number;
 }
 
+interface VarianceRow {
+    projectName: string;
+    entryType: string;
+    oldAmount: number;
+    newAmount: number;
+    variance: number;
+}
+
+interface VarianceData {
+    periodLabel: string;
+    rows: VarianceRow[];
+    oldTotals: { capitalized: number; expensed: number; amortization: number };
+    newTotals: { capitalized: number; expensed: number; amortization: number };
+}
+
 function formatCurrency(amount: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
 }
@@ -108,6 +123,7 @@ export default function JournalEntriesPage() {
     const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
     const [lockingPeriodId, setLockingPeriodId] = useState<string | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+    const [varianceData, setVarianceData] = useState<VarianceData | null>(null);
 
     const togglePeriod = (id: string) => {
         setCollapsedPeriods((prev) => {
@@ -152,6 +168,11 @@ export default function JournalEntriesPage() {
     };
 
     const generateEntries = async () => {
+        // Snapshot old entries before regeneration
+        const existingPeriod = periods.find(p => p.month === genMonth && p.year === genYear);
+        const oldEntries = existingPeriod?.journalEntries || [];
+        const wasRegen = oldEntries.length > 0;
+
         setShowRegenConfirm(false);
         setGenerating(true);
         setGenResult(null);
@@ -164,6 +185,61 @@ export default function JournalEntriesPage() {
             const data = await res.json();
             setGenResult(`✓ Generated: Cap ${formatCurrency(data.totalCapitalized)} · Exp ${formatCurrency(data.totalExpensed)} · Amort ${formatCurrency(data.totalAmortization)}`);
             loadPeriods();
+
+            // Build variance comparison for regenerations
+            if (wasRegen && data.entries) {
+                const periodLabel = `${MONTHS[genMonth - 1]} ${genYear}`;
+
+                // Build lookup: "projectName|entryType" → amount
+                const oldMap = new Map<string, number>();
+                for (const e of oldEntries) {
+                    const key = `${e.project.name}|${e.entryType}`;
+                    oldMap.set(key, (oldMap.get(key) || 0) + e.amount);
+                }
+
+                const newMap = new Map<string, number>();
+                for (const e of data.entries) {
+                    const key = `${e.projectName}|${e.entryType}`;
+                    newMap.set(key, (newMap.get(key) || 0) + e.amount);
+                }
+
+                // Merge all keys
+                const allKeys = new Set([...Array.from(oldMap.keys()), ...Array.from(newMap.keys())]);
+                const rows: VarianceRow[] = [];
+                for (const key of Array.from(allKeys)) {
+                    const [projectName, entryType] = key.split('|');
+                    const oldAmt = oldMap.get(key) || 0;
+                    const newAmt = newMap.get(key) || 0;
+                    rows.push({
+                        projectName,
+                        entryType,
+                        oldAmount: oldAmt,
+                        newAmount: newAmt,
+                        variance: newAmt - oldAmt,
+                    });
+                }
+
+                // Sort by entry type then project
+                rows.sort((a, b) => a.entryType.localeCompare(b.entryType) || a.projectName.localeCompare(b.projectName));
+
+                const sumByType = (entries: { entryType: string; amount: number }[], type: string) =>
+                    entries.filter(e => e.entryType === type).reduce((s, e) => s + e.amount, 0);
+
+                setVarianceData({
+                    periodLabel,
+                    rows,
+                    oldTotals: {
+                        capitalized: sumByType(oldEntries, 'CAPITALIZATION'),
+                        expensed: sumByType(oldEntries, 'EXPENSE'),
+                        amortization: sumByType(oldEntries, 'AMORTIZATION'),
+                    },
+                    newTotals: {
+                        capitalized: data.totalCapitalized,
+                        expensed: data.totalExpensed,
+                        amortization: data.totalAmortization,
+                    },
+                });
+            }
         } catch {
             setGenResult('✗ Generation failed');
         } finally {
@@ -650,6 +726,131 @@ export default function JournalEntriesPage() {
                         <div className="flex items-center gap-3 justify-end">
                             <button onClick={() => setShowRegenConfirm(false)} className="btn-secondary">Cancel</button>
                             <button onClick={generateEntries} className="btn-primary" style={{ background: '#FA4338' }}>Yes, Regenerate</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Variance Comparison Modal */}
+            {varianceData && (
+                <div className="modal-overlay" onClick={() => setVarianceData(null)}>
+                    <div className="modal-content" style={{ maxWidth: 920 }} onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-start justify-between mb-6">
+                            <div>
+                                <div className="flex items-center gap-3 mb-1">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#F0EAF8' }}>
+                                        <TrendingDown className="w-4 h-4" style={{ color: '#4141A2' }} />
+                                    </div>
+                                    <h2 className="text-lg font-bold" style={{ color: '#3F4450' }}>Regeneration Variance Report</h2>
+                                </div>
+                                <p className="text-xs" style={{ color: '#A4A9B6' }}>
+                                    {varianceData.periodLabel} — Previous vs regenerated journal entries
+                                </p>
+                            </div>
+                            <button onClick={() => setVarianceData(null)} style={{ color: '#A4A9B6' }} className="hover:opacity-70">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Summary Totals */}
+                        <div className="grid grid-cols-3 gap-4 mb-5">
+                            {[
+                                {
+                                    label: 'Capitalization',
+                                    old: varianceData.oldTotals.capitalized,
+                                    new_: varianceData.newTotals.capitalized,
+                                    color: '#21944E',
+                                    bg: '#EBF5EF',
+                                },
+                                {
+                                    label: 'Expense',
+                                    old: varianceData.oldTotals.expensed,
+                                    new_: varianceData.newTotals.expensed,
+                                    color: '#FA4338',
+                                    bg: '#FFF5F5',
+                                },
+                                {
+                                    label: 'Amortization',
+                                    old: varianceData.oldTotals.amortization,
+                                    new_: varianceData.newTotals.amortization,
+                                    color: '#4141A2',
+                                    bg: '#F0EAF8',
+                                },
+                            ].map((t) => {
+                                const v = t.new_ - t.old;
+                                return (
+                                    <div key={t.label} className="rounded-xl p-3" style={{ background: t.bg }}>
+                                        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: t.color }}>{t.label}</p>
+                                        <div className="grid grid-cols-3 gap-1 text-xs">
+                                            <div>
+                                                <span className="block text-[9px] uppercase tracking-wider mb-0.5" style={{ color: '#A4A9B6' }}>Before</span>
+                                                <span className="font-semibold tabular-nums" style={{ color: '#717684' }}>{formatCurrency(t.old)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-[9px] uppercase tracking-wider mb-0.5" style={{ color: '#A4A9B6' }}>After</span>
+                                                <span className="font-bold tabular-nums" style={{ color: '#3F4450' }}>{formatCurrency(t.new_)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-[9px] uppercase tracking-wider mb-0.5" style={{ color: '#A4A9B6' }}>Variance</span>
+                                                <span className="font-bold tabular-nums" style={{ color: Math.abs(v) < 0.01 ? '#A4A9B6' : v > 0 ? '#FA4338' : '#21944E' }}>
+                                                    {v > 0 ? '+' : ''}{formatCurrency(v)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Detail Table */}
+                        <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#E2E4E9', maxHeight: 400, overflowY: 'auto' }}>
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr style={{ background: '#F6F6F9', borderBottom: '2px solid #E2E4E9', position: 'sticky', top: 0 }}>
+                                        <th className="px-4 py-2.5 text-left font-semibold" style={{ color: '#A4A9B6', fontSize: 10 }}>PROJECT</th>
+                                        <th className="px-4 py-2.5 text-left font-semibold" style={{ color: '#A4A9B6', fontSize: 10 }}>TYPE</th>
+                                        <th className="px-4 py-2.5 text-right font-semibold" style={{ color: '#A4A9B6', fontSize: 10 }}>BEFORE</th>
+                                        <th className="px-4 py-2.5 text-right font-semibold" style={{ color: '#A4A9B6', fontSize: 10 }}>AFTER</th>
+                                        <th className="px-4 py-2.5 text-right font-semibold" style={{ color: '#A4A9B6', fontSize: 10 }}>VARIANCE</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {varianceData.rows.map((row, i) => {
+                                        const typeConf2 = entryTypeConfig[row.entryType] || entryTypeConfig['EXPENSE'];
+                                        const hasVariance = Math.abs(row.variance) >= 0.01;
+                                        return (
+                                            <tr key={i} style={{
+                                                borderBottom: '1px solid #E2E4E9',
+                                                background: hasVariance ? 'rgba(245,166,35,0.03)' : 'transparent',
+                                            }}>
+                                                <td className="px-4 py-2.5 font-medium" style={{ color: '#3F4450' }}>{row.projectName}</td>
+                                                <td className="px-4 py-2.5">
+                                                    <span className="badge" style={{ background: typeConf2.bg, color: typeConf2.color, fontSize: 9 }}>
+                                                        {typeConf2.label}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right tabular-nums" style={{ color: '#717684' }}>{formatCurrency(row.oldAmount)}</td>
+                                                <td className="px-4 py-2.5 text-right font-semibold tabular-nums" style={{ color: '#3F4450' }}>{formatCurrency(row.newAmount)}</td>
+                                                <td className="px-4 py-2.5 text-right font-bold tabular-nums" style={{
+                                                    color: !hasVariance ? '#A4A9B6' : row.variance > 0 ? '#FA4338' : '#21944E',
+                                                }}>
+                                                    {hasVariance ? (row.variance > 0 ? '+' : '') : ''}{formatCurrency(row.variance)}
+                                                    {!hasVariance && <span className="ml-1">—</span>}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-4">
+                            <p className="text-[10px]" style={{ color: '#A4A9B6' }}>
+                                {varianceData.rows.filter(r => Math.abs(r.variance) >= 0.01).length} of {varianceData.rows.length} entries have variances
+                            </p>
+                            <button onClick={() => setVarianceData(null)} className="btn-primary">
+                                Dismiss
+                            </button>
                         </div>
                     </div>
                 </div>
