@@ -474,18 +474,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 </button>
             </div>
 
-            {/* ── Footer Card ── */}
-            {!collapsed && (
-                <div style={{
-                    padding: 16, margin: '0 12px 12px',
-                    borderRadius: 12,
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#FA4338' }}>Software Cap Tool</p>
-                    <p style={{ fontSize: 11, marginTop: 4, color: '#A4A9B6' }}>Internal-use software cost capitalization & amortization</p>
-                </div>
-            )}
+
         </nav>
     );
 }
