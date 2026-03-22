@@ -50,7 +50,7 @@ export const AdminUpdateSchema = z.discriminatedUnion('type', [
 
 export const CreateProjectSchema = z.object({
     name: z.string().min(1, 'Name is required'),
-    epicKey: z.string().min(1, 'Epic Key is required'),
+    epicKey: z.string().optional().default(''),
     description: z.string().nullable().optional(),
     status: z.enum(PROJECT_STATUSES).default('PLANNING'),
     isCapitalizable: z.boolean().default(true),
@@ -59,6 +59,11 @@ export const CreateProjectSchema = z.object({
     launchDate: z.string().nullable().optional(),
     startingBalance: z.number().min(0).default(0),
     startingAmortization: z.number().min(0).default(0),
+    amortizationSchedule: z.array(z.object({
+        month: z.number().int().min(1).max(12),
+        year: z.number().int().min(2000).max(2100),
+        charge: z.number().min(0),
+    })).optional(),
 });
 
 export const UpdateProjectSchema = z.object({

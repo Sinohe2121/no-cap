@@ -165,13 +165,16 @@ export async function POST(request: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
         }
-        const { name, description, epicKey, status, isCapitalizable, amortizationMonths, startDate, launchDate, startingBalance, startingAmortization } = parsed.data;
+        const { name, description, epicKey, status, isCapitalizable, amortizationMonths, startDate, launchDate, startingBalance, startingAmortization, amortizationSchedule } = parsed.data;
+
+        // Auto-generate epicKey for legacy projects if not provided
+        const finalEpicKey = epicKey || `LEGACY-${Date.now().toString(36).toUpperCase().slice(-5)}`;
 
         const project = await prisma.project.create({
             data: {
                 name,
                 description: description || null,
-                epicKey,
+                epicKey: finalEpicKey,
                 status,
                 isCapitalizable,
                 amortizationMonths,
@@ -181,6 +184,18 @@ export async function POST(request: Request) {
                 startingAmortization,
             },
         });
+
+        // If an amortization schedule was provided (legacy projects), persist overrides
+        if (amortizationSchedule && amortizationSchedule.length > 0) {
+            await prisma.amortizationOverride.createMany({
+                data: amortizationSchedule.map((row) => ({
+                    projectId: project.id,
+                    month: row.month,
+                    year: row.year,
+                    charge: row.charge,
+                })),
+            });
+        }
 
         return NextResponse.json(project);
     } catch (error) {

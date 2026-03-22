@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FolderKanban, ArrowRight, ArrowLeft, ChevronDown, Ticket, Plus, X } from 'lucide-react';
+import { FolderKanban, ArrowRight, ArrowLeft, ChevronDown, Ticket, Plus, X, Calendar } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -55,6 +55,84 @@ export default function ProjectsPage() {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+    // ── Legacy Project Modal State ──
+    const [showLegacyModal, setShowLegacyModal] = useState(false);
+    const [legacyForm, setLegacyForm] = useState({ name: '', capitalizedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
+    const [legacySchedule, setLegacySchedule] = useState<{ month: number; year: number; charge: number }[]>([]);
+    const [legacySaving, setLegacySaving] = useState(false);
+    const [legacyError, setLegacyError] = useState<string | null>(null);
+
+    // Auto-generate amortization schedule when form values change
+    const recalcSchedule = (capAmt: string, accDep: string, asOf: string, life: number) => {
+        const cap = parseFloat(capAmt) || 0;
+        const dep = parseFloat(accDep) || 0;
+        if (!asOf || cap <= 0 || life <= 0) { setLegacySchedule([]); return; }
+        const remaining = Math.max(0, cap - dep);
+        const monthlyCharge = remaining / life;
+        const asOfDate = new Date(asOf + 'T00:00:00');
+        const startMonth = asOfDate.getMonth() + 2; // month after as-of (0-indexed + 1 + 1)
+        const startYear = asOfDate.getFullYear();
+        const rows: { month: number; year: number; charge: number }[] = [];
+        for (let i = 0; i < life; i++) {
+            const m = ((startMonth - 1 + i) % 12) + 1;
+            const y = startYear + Math.floor((startMonth - 1 + i) / 12);
+            rows.push({ month: m, year: y, charge: Math.round(monthlyCharge * 100) / 100 });
+        }
+        setLegacySchedule(rows);
+    };
+
+    const updateLegacyField = (field: string, value: string | number) => {
+        const updated = { ...legacyForm, [field]: value };
+        setLegacyForm(updated);
+        recalcSchedule(updated.capitalizedAmount, updated.accumulatedDepreciation, updated.asOfDate, updated.usefulLife);
+    };
+
+    const updateScheduleRow = (index: number, charge: number) => {
+        setLegacySchedule(prev => prev.map((row, i) => i === index ? { ...row, charge } : row));
+    };
+
+    const createLegacyProject = async () => {
+        const cap = parseFloat(legacyForm.capitalizedAmount);
+        const dep = parseFloat(legacyForm.accumulatedDepreciation) || 0;
+        if (!legacyForm.name) { setLegacyError('Project name is required.'); return; }
+        if (!cap || cap <= 0) { setLegacyError('Capitalized amount is required.'); return; }
+        if (!legacyForm.asOfDate) { setLegacyError('As-of date is required.'); return; }
+        if (legacySchedule.length === 0) { setLegacyError('Amortization schedule is empty.'); return; }
+
+        setLegacySaving(true);
+        setLegacyError(null);
+        try {
+            const res = await fetch('/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: legacyForm.name,
+                    status: 'LIVE',
+                    isCapitalizable: true,
+                    amortizationMonths: legacyForm.usefulLife,
+                    startDate: legacyForm.asOfDate,
+                    launchDate: legacyForm.asOfDate,
+                    startingBalance: cap,
+                    startingAmortization: dep,
+                    amortizationSchedule: legacySchedule,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                setLegacyError(err.error || 'Failed to create project');
+                return;
+            }
+            setShowLegacyModal(false);
+            setLegacyForm({ name: '', capitalizedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
+            setLegacySchedule([]);
+            loadProjects();
+        } catch {
+            setLegacyError('Network error — please try again.');
+        } finally {
+            setLegacySaving(false);
+        }
+    };
 
     const loadProjects = () => {
         setLoading(true);
@@ -156,6 +234,9 @@ export default function ProjectsPage() {
                     </Link>
                     <Button onClick={() => { setForm(BLANK_FORM); setSaveError(null); setShowModal(true); }}>
                         <Plus className="w-4 h-4" /> New Project
+                    </Button>
+                    <Button variant="secondary" onClick={() => { setLegacyError(null); setShowLegacyModal(true); }}>
+                        <Calendar className="w-4 h-4" /> Legacy Project
                     </Button>
                 </div>
             </div>
@@ -391,6 +472,160 @@ export default function ProjectsPage() {
                                 <Button variant="secondary" onClick={() => setShowModal(false)} className="flex-1">Cancel</Button>
                                 <Button variant="primary" onClick={createProject} isLoading={saving} className="flex-1">
                                     {saving ? 'Creating...' : 'Create Project'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ─── Legacy Project Modal ─── */}
+            {showLegacyModal && (
+                <div className="modal-overlay" onClick={() => setShowLegacyModal(false)}>
+                    <div className="modal-content" style={{ maxWidth: 680, maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#EDE9F7' }}>
+                                    <Calendar className="w-4.5 h-4.5" style={{ color: '#4141A2' }} />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold" style={{ color: '#3F4450' }}>Legacy Project</h2>
+                                    <p className="text-xs" style={{ color: '#A4A9B6' }}>Import a project with existing cost basis &amp; amortization</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowLegacyModal(false)} style={{ color: '#A4A9B6' }} className="hover:opacity-70">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Project Name */}
+                            <div>
+                                <label className="form-label">Project Name <span style={{ color: '#FA4338' }}>*</span></label>
+                                <input
+                                    type="text"
+                                    value={legacyForm.name}
+                                    onChange={(e) => updateLegacyField('name', e.target.value)}
+                                    placeholder="e.g. Platform Migration v1"
+                                    className="form-input"
+                                />
+                            </div>
+
+                            {/* Amount + As-of Date row */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Capitalized Amount ($) <span style={{ color: '#FA4338' }}>*</span></label>
+                                    <input
+                                        type="number"
+                                        value={legacyForm.capitalizedAmount}
+                                        onChange={(e) => updateLegacyField('capitalizedAmount', e.target.value)}
+                                        placeholder="250,000"
+                                        className="form-input"
+                                        min={0}
+                                        step="0.01"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">As-of Date <span style={{ color: '#FA4338' }}>*</span></label>
+                                    <input
+                                        type="date"
+                                        value={legacyForm.asOfDate}
+                                        onChange={(e) => updateLegacyField('asOfDate', e.target.value)}
+                                        className="form-input"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Depreciation + Useful Life row */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Accumulated Depreciation ($)</label>
+                                    <input
+                                        type="number"
+                                        value={legacyForm.accumulatedDepreciation}
+                                        onChange={(e) => updateLegacyField('accumulatedDepreciation', e.target.value)}
+                                        placeholder="0.00"
+                                        className="form-input"
+                                        min={0}
+                                        step="0.01"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Useful Life (Months)</label>
+                                    <input
+                                        type="number"
+                                        value={legacyForm.usefulLife}
+                                        onChange={(e) => updateLegacyField('usefulLife', Number(e.target.value) || 36)}
+                                        min={1}
+                                        className="form-input"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Amortization Schedule Preview */}
+                            {legacySchedule.length > 0 && (
+                                <div className="rounded-xl border" style={{ borderColor: '#E2E4E9' }}>
+                                    <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#E2E4E9', background: '#FAFBFC' }}>
+                                        <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Amortization Schedule</p>
+                                        <p className="text-[11px] font-semibold" style={{ color: '#4141A2' }}>
+                                            Total: {formatCurrency(legacySchedule.reduce((sum, r) => sum + r.charge, 0))}
+                                        </p>
+                                    </div>
+                                    <div style={{ maxHeight: 280, overflow: 'auto' }}>
+                                        <table className="data-table" style={{ margin: 0 }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ position: 'sticky', top: 0, background: '#FAFBFC', zIndex: 1 }}>Month</th>
+                                                    <th style={{ position: 'sticky', top: 0, background: '#FAFBFC', zIndex: 1 }} className="text-right">Monthly Charge ($)</th>
+                                                    <th style={{ position: 'sticky', top: 0, background: '#FAFBFC', zIndex: 1 }} className="text-right">Remaining NBV</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(() => {
+                                                    const cap = parseFloat(legacyForm.capitalizedAmount) || 0;
+                                                    const dep = parseFloat(legacyForm.accumulatedDepreciation) || 0;
+                                                    let runningNbv = cap - dep;
+                                                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                    return legacySchedule.map((row, i) => {
+                                                        runningNbv = Math.max(0, runningNbv - row.charge);
+                                                        return (
+                                                            <tr key={i}>
+                                                                <td className="text-xs font-medium" style={{ color: '#3F4450' }}>
+                                                                    {monthNames[row.month - 1]} {row.year}
+                                                                </td>
+                                                                <td className="text-right">
+                                                                    <input
+                                                                        type="number"
+                                                                        value={row.charge}
+                                                                        onChange={(e) => updateScheduleRow(i, parseFloat(e.target.value) || 0)}
+                                                                        className="text-right text-xs font-mono w-28 rounded-md px-2 py-1 border transition-colors focus:outline-none"
+                                                                        style={{ borderColor: '#E2E4E9', color: '#3F4450', background: '#fff' }}
+                                                                        onFocus={(e) => { e.currentTarget.style.borderColor = '#4141A2'; }}
+                                                                        onBlur={(e) => { e.currentTarget.style.borderColor = '#E2E4E9'; }}
+                                                                        min={0}
+                                                                        step="0.01"
+                                                                    />
+                                                                </td>
+                                                                <td className="text-right text-xs font-mono" style={{ color: runningNbv <= 0 ? '#A4A9B6' : '#3F4450' }}>
+                                                                    {formatCurrency(runningNbv)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })()}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {legacyError && (
+                                <p className="text-sm" style={{ color: '#FA4338' }}>{legacyError}</p>
+                            )}
+
+                            <div className="flex gap-3 pt-2">
+                                <Button variant="secondary" onClick={() => setShowLegacyModal(false)} className="flex-1">Cancel</Button>
+                                <Button variant="primary" onClick={createLegacyProject} isLoading={legacySaving} className="flex-1">
+                                    {legacySaving ? 'Creating...' : 'Create Legacy Project'}
                                 </Button>
                             </div>
                         </div>
