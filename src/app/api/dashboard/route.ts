@@ -155,6 +155,14 @@ export async function GET(request: Request) {
             return { ...p, derivedCost, totalCostForProject };
         });
 
+        // ── Add legacy starting balances to summary totals ──
+        let legacyCapitalized = 0;
+        let legacyAmortization = 0;
+        for (const p of projects) {
+            legacyCapitalized += p.startingBalance;
+            legacyAmortization += p.startingAmortization;
+        }
+
         const activeDeveloperCount = developers.length;
 
         const topProjects = projectsWithCosts
@@ -177,7 +185,7 @@ export async function GET(request: Request) {
 
         for (const p of projects) {
             if (p.isCapitalizable && p.status === 'LIVE') {
-                if ((capCountByProject.get(p.id) || 0) === 0) {
+                if ((capCountByProject.get(p.id) || 0) === 0 && p.startingBalance <= 0) {
                     alerts.push({
                         id: p.id,
                         name: p.name,
@@ -236,9 +244,9 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             summary: {
-                totalAssetValue: totalCapitalizedYtd,
+                totalAssetValue: totalCapitalizedYtd + legacyCapitalized,
                 totalExpensed: totalExpensedYtd,
-                ytdAmortization,
+                ytdAmortization: ytdAmortization + legacyAmortization,
                 activeDeveloperCount,
                 totalProjects: projects.length,
             },
