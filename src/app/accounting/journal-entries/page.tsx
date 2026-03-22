@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, Calculator, FileDown, Search, X, DollarSign, TrendingDown, ClipboardList, ChevronDown, ChevronRight, Lock, Unlock, ArrowLeft } from 'lucide-react';
+import { BookOpen, Calculator, FileDown, Search, X, DollarSign, TrendingDown, ClipboardList, ChevronDown, ChevronRight, Lock, Unlock, ArrowLeft, AlertTriangle } from 'lucide-react';
 
 interface Period {
     id: string;
@@ -107,6 +107,7 @@ export default function JournalEntriesPage() {
     const [payrollAuditLoading, setPayrollAuditLoading] = useState(false);
     const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
     const [lockingPeriodId, setLockingPeriodId] = useState<string | null>(null);
+    const [showRegenConfirm, setShowRegenConfirm] = useState(false);
 
     const togglePeriod = (id: string) => {
         setCollapsedPeriods((prev) => {
@@ -141,7 +142,17 @@ export default function JournalEntriesPage() {
 
     useEffect(() => { loadPeriods(); }, []);
 
+    const handleGenerateClick = () => {
+        const existingPeriod = periods.find(p => p.month === genMonth && p.year === genYear);
+        if (existingPeriod && existingPeriod.journalEntries.length > 0) {
+            setShowRegenConfirm(true);
+        } else {
+            generateEntries();
+        }
+    };
+
     const generateEntries = async () => {
+        setShowRegenConfirm(false);
         setGenerating(true);
         setGenResult(null);
         try {
@@ -253,7 +264,7 @@ export default function JournalEntriesPage() {
                         </select>
                     </div>
                     <button
-                        onClick={generateEntries}
+                        onClick={handleGenerateClick}
                         disabled={generating || !!periods.find(p => p.month === genMonth && p.year === genYear && p.status === 'CLOSED')}
                         className="btn-primary"
                         title={periods.find(p => p.month === genMonth && p.year === genYear && p.status === 'CLOSED') ? 'Period is closed — reopen to generate entries' : undefined}
@@ -611,6 +622,34 @@ export default function JournalEntriesPage() {
                             </div>
 
                             <button onClick={saveLegacy} className="btn-primary">Save Opening Balances</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Regeneration Confirmation Modal */}
+            {showRegenConfirm && (
+                <div className="modal-overlay" onClick={() => setShowRegenConfirm(false)}>
+                    <div className="modal-content" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-start gap-4 mb-5">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FFF5F5' }}>
+                                <AlertTriangle className="w-5 h-5" style={{ color: '#FA4338' }} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold mb-1" style={{ color: '#3F4450' }}>Regenerate Journal Entries?</h2>
+                                <p className="text-sm" style={{ color: '#717684' }}>
+                                    <strong>{MONTHS[genMonth - 1]} {genYear}</strong> already has journal entries. Regenerating will:
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rounded-xl p-4 mb-5 space-y-2" style={{ background: '#FFF5F5', border: '1px solid rgba(250,67,56,0.15)' }}>
+                            <p className="text-xs font-medium" style={{ color: '#FA4338' }}>• Delete all existing entries for this period</p>
+                            <p className="text-xs font-medium" style={{ color: '#FA4338' }}>• Reverse capitalized amounts on affected tickets</p>
+                            <p className="text-xs font-medium" style={{ color: '#FA4338' }}>• Recalculate all costs and create new entries</p>
+                        </div>
+                        <div className="flex items-center gap-3 justify-end">
+                            <button onClick={() => setShowRegenConfirm(false)} className="btn-secondary">Cancel</button>
+                            <button onClick={generateEntries} className="btn-primary" style={{ background: '#FA4338' }}>Yes, Regenerate</button>
                         </div>
                     </div>
                 </div>
