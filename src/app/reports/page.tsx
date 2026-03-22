@@ -320,7 +320,7 @@ function AmortScheduleTab() {
                             <ResponsiveContainer width="100%" height={180}>
                                 <BarChart data={chartData} barSize={32}>
                                     <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
-                                    <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
+                                    <YAxis tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`} tick={{ fontSize: 11, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
                                     <Tooltip formatter={(v: number | undefined) => v !== undefined ? fmt(v) : '—'} cursor={{ fill: 'rgba(65,65,162,0.05)' }} />
                                     <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                                         {chartData.map((_, i) => <Cell key={i} fill="#4141A2" fillOpacity={0.8} />)}
@@ -428,7 +428,7 @@ function ForecastTab({ apiParams }: { apiParams: string }) {
                 <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={chartData} barSize={24} barGap={2}>
                         <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`} tick={{ fontSize: 11, fill: '#A4A9B6' }} axisLine={false} tickLine={false} />
                         <Tooltip formatter={(v: number | undefined) => v !== undefined ? fmt(v) : '—'} cursor={{ fill: 'rgba(65,65,162,0.04)' }} />
                         <Bar dataKey="cap" name="Capitalized" stackId="a" radius={[0, 0, 0, 0]}>
                             {chartData.map((row, i) => (

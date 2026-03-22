@@ -263,7 +263,7 @@ export default function DashboardPage() {
                                 />
                                 <YAxis 
                                     tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} 
-                                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} 
+                                    tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`} 
                                     axisLine={false} 
                                     tickLine={false} 
                                     dx={-10} 
@@ -304,7 +304,7 @@ export default function DashboardPage() {
                                 <XAxis 
                                     type="number" 
                                     tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} 
-                                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} 
+                                    tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`} 
                                     axisLine={false} 
                                     tickLine={false} 
                                     dx={0} 
@@ -354,7 +354,7 @@ export default function DashboardPage() {
                                 />
                                 <YAxis 
                                     tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} 
-                                    tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`} 
+                                    tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toLocaleString()}k` : `$${v.toLocaleString()}`} 
                                     axisLine={false} 
                                     tickLine={false} 
                                     dx={-10} 

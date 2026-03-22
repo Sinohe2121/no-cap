@@ -243,7 +243,7 @@ export default function PeriodComparisonPage() {
                                 <BarChart data={financialChartData} barCategoryGap="25%">
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF0F4" />
                                     <XAxis dataKey="metric" tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                                    <YAxis tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toLocaleString()}k` : `$${v.toLocaleString()}`} axisLine={false} tickLine={false} />
                                     <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E4E9', borderRadius: 10, padding: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }} formatter={(v: number | undefined) => fmt(v ?? 0)} />
                                     <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 600, paddingTop: 12 }} />
                                     <Bar dataKey="A" name={labelA} fill="#4141A2" barSize={28} radius={[4, 4, 0, 0]} />
