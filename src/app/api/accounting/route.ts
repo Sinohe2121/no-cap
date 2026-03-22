@@ -78,17 +78,21 @@ export async function POST(request: Request) {
             where: { periodId: period.id, entryType: ENTRY_TYPES.CAPITALIZATION },
             select: { id: true, projectId: true, amount: true },
         });
+
+        // Batch reverse project accumulatedCost (group by projectId first)
+        const projectDecrements: Record<string, number> = {};
         for (const entry of existingEntries) {
             if (entry.projectId) {
-                await prisma.project.update({
-                    where: { id: entry.projectId },
-                    data: { accumulatedCost: { decrement: entry.amount } },
-                });
+                projectDecrements[entry.projectId] = (projectDecrements[entry.projectId] || 0) + entry.amount;
             }
         }
+        await Promise.all(
+            Object.entries(projectDecrements).map(([pid, amt]) =>
+                prisma.project.update({ where: { id: pid }, data: { accumulatedCost: { decrement: amt } } })
+            )
+        );
 
-        // ── CRITICAL: Reverse ticket-level capitalizedAmount from previous generation ──
-        // Without this, regenerating a period doubles every ticket's capitalizedAmount
+        // ── CRITICAL: Batch reverse ticket-level capitalizedAmount from previous generation ──
         const existingCapEntryIds = existingEntries.map(e => e.id);
         if (existingCapEntryIds.length > 0) {
             const existingAuditTrails = await prisma.auditTrail.findMany({
@@ -96,27 +100,33 @@ export async function POST(request: Request) {
                 select: { jiraTicketId: true, allocatedAmount: true },
             });
 
-            // Aggregate amounts per ticket (a ticket may appear in multiple audit rows)
+            // Aggregate amounts per ticket
             const ticketReversal: Record<string, number> = {};
             for (const at of existingAuditTrails) {
                 ticketReversal[at.jiraTicketId] = (ticketReversal[at.jiraTicketId] || 0) + at.allocatedAmount;
             }
 
-            // Reverse each ticket's capitalizedAmount
-            for (const [ticketId, amount] of Object.entries(ticketReversal)) {
-                const ticket = await prisma.jiraTicket.findUnique({
-                    where: { id: ticketId },
-                    select: { capitalizedAmount: true },
+            // Batch fetch all tickets that need reversal, then batch update
+            const ticketIds = Object.keys(ticketReversal);
+            if (ticketIds.length > 0) {
+                const tickets = await prisma.jiraTicket.findMany({
+                    where: { id: { in: ticketIds } },
+                    select: { id: true, capitalizedAmount: true },
                 });
-                const newAmount = Math.max(0, (ticket?.capitalizedAmount || 0) - amount);
-                await prisma.jiraTicket.update({
-                    where: { id: ticketId },
-                    data: {
-                        capitalizedAmount: newAmount,
-                        // Reset firstCapitalizedDate if ticket would have zero capitalization
-                        ...(newAmount <= 0 ? { firstCapitalizedDate: null } : {}),
-                    },
-                });
+
+                await Promise.all(
+                    tickets.map(ticket => {
+                        const reverseAmt = ticketReversal[ticket.id] || 0;
+                        const newAmount = Math.max(0, (ticket.capitalizedAmount || 0) - reverseAmt);
+                        return prisma.jiraTicket.update({
+                            where: { id: ticket.id },
+                            data: {
+                                capitalizedAmount: newAmount,
+                                ...(newAmount <= 0 ? { firstCapitalizedDate: null } : {}),
+                            },
+                        });
+                    })
+                );
             }
         }
 
@@ -177,6 +187,9 @@ export async function POST(request: Request) {
         }
 
         // ─── STEP 2: Create capitalization entries + write to tickets ────
+        const ticketUpdates: Promise<any>[] = [];
+        const projectAccIncrements: Record<string, number> = {};
+
         for (const [projectId, amount] of Object.entries(projectCaps)) {
             const entry = await prisma.journalEntry.create({
                 data: {
@@ -221,16 +234,17 @@ export async function POST(request: Request) {
                         allocatedAmount: ticketAllocation,
                     });
 
-                    // ── WRITE capitalizedAmount back to the ticket ──
-                    // Set firstCapitalizedDate on first capitalization for accumulation tracking
-                    await prisma.jiraTicket.update({
-                        where: { id: ticket.id },
-                        data: {
-                            capitalizedAmount: { increment: ticketAllocation },
-                            amortizationMonths: projectAmortMap.get(projectId) ?? 36,
-                            ...(ticket.firstCapitalizedDate ? {} : { firstCapitalizedDate: startDate }),
-                        },
-                    });
+                    // Defer ticket updates to batch
+                    ticketUpdates.push(
+                        prisma.jiraTicket.update({
+                            where: { id: ticket.id },
+                            data: {
+                                capitalizedAmount: { increment: ticketAllocation },
+                                amortizationMonths: projectAmortMap.get(projectId) ?? 36,
+                                ...(ticket.firstCapitalizedDate ? {} : { firstCapitalizedDate: startDate }),
+                            },
+                        })
+                    );
                 }
             }
 
@@ -238,12 +252,18 @@ export async function POST(request: Request) {
                 await prisma.auditTrail.createMany({ data: auditRows });
             }
 
-            // Update project accumulated cost (rollup for reporting)
-            await prisma.project.update({
-                where: { id: projectId },
-                data: { accumulatedCost: { increment: amount } },
-            });
+            projectAccIncrements[projectId] = (projectAccIncrements[projectId] || 0) + amount;
         }
+
+        // Fire all ticket updates in parallel
+        await Promise.all(ticketUpdates);
+
+        // Batch update project accumulated costs
+        await Promise.all(
+            Object.entries(projectAccIncrements).map(([pid, amt]) =>
+                prisma.project.update({ where: { id: pid }, data: { accumulatedCost: { increment: amt } } })
+            )
+        );
 
         // ─── STEP 3: Create expense entries per project ────────────────
         for (const [projectId, amount] of Object.entries(projectExps)) {
