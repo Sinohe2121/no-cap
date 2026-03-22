@@ -86,12 +86,17 @@ model Project {
   mgmtAuthorized        Boolean        @default(false)  // ASU 2025-06: management sign-off
   probableToComplete    Boolean        @default(false)  // ASU 2025-06: probable to complete
   budgetTarget          Float?         // monthly R&D budget target (for Budget vs. Actuals)
+  parentProjectId       String?        // if set, this is a linked legacy asset under another project
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  parentProject     Project?  @relation("LegacyChildren", fields: [parentProjectId], references: [id])
+  legacyChildren    Project[] @relation("LegacyChildren")
   tickets               JiraTicket[]
   journalEntries        JournalEntry[]
   amortOverrides        AmortizationOverride[]
+
+  @@index([parentProjectId])
 }
 
 // ─── Jira Tickets (Imported Activity) ───────────────────────────

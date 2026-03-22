@@ -28,6 +28,8 @@ interface Project {
     ticketCount: number;
     storyPoints: number;
     bugCount: number;
+    parentProjectId: string | null;
+    legacyChildren: { id: string; name: string; startingBalance: number; startingAmortization: number }[];
 }
 
 const BLANK_FORM = {
@@ -62,6 +64,7 @@ export default function ProjectsPage() {
     const [legacySchedule, setLegacySchedule] = useState<{ month: number; year: number; charge: number }[]>([]);
     const [legacySaving, setLegacySaving] = useState(false);
     const [legacyError, setLegacyError] = useState<string | null>(null);
+    const [linkedProjectId, setLinkedProjectId] = useState<string>('');
 
     // Auto-generate amortization schedule when form values change
     const recalcSchedule = (capAmt: string, accDep: string, asOf: string, life: number) => {
@@ -116,6 +119,7 @@ export default function ProjectsPage() {
                     startingBalance: cap,
                     startingAmortization: dep,
                     amortizationSchedule: legacySchedule,
+                    ...(linkedProjectId && { parentProjectId: linkedProjectId }),
                 }),
             });
             if (!res.ok) {
@@ -126,6 +130,7 @@ export default function ProjectsPage() {
             setShowLegacyModal(false);
             setLegacyForm({ name: '', capitalizedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
             setLegacySchedule([]);
+            setLinkedProjectId('');
             loadProjects();
         } catch {
             setLegacyError('Network error — please try again.');
@@ -258,11 +263,18 @@ export default function ProjectsPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {projects.map((project) => (
+                        {projects.filter(p => !p.parentProjectId).map((project) => (
                             <tr key={project.id}>
                                 <td>
                                     <div>
-                                        <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>{project.name}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>{project.name}</p>
+                                            {project.legacyChildren?.length > 0 && (
+                                                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md" style={{ background: '#EDE9F7', color: '#4141A2' }}>
+                                                    {project.legacyChildren.length} Legacy
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-xs mt-0.5" style={{ color: '#A4A9B6' }}>{project.description}</p>
                                     </div>
                                 </td>
@@ -508,6 +520,40 @@ export default function ProjectsPage() {
                                     placeholder="e.g. Platform Migration v1"
                                     className="form-input"
                                 />
+                            </div>
+
+                            {/* Link to Existing Project */}
+                            <div className="rounded-xl border p-4" style={{ borderColor: '#E2E4E9', background: '#FAFBFC' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Link to Existing Project</p>
+                                    {linkedProjectId && (
+                                        <button
+                                            onClick={() => setLinkedProjectId('')}
+                                            className="text-[10px] font-semibold hover:underline"
+                                            style={{ color: '#FA4338' }}
+                                        >
+                                            Remove Link
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-xs mb-3" style={{ color: '#717684' }}>
+                                    {linkedProjectId
+                                        ? 'This legacy asset will appear as a ticket under the linked project.'
+                                        : 'Optional — link to an existing project, or leave empty for a standalone legacy asset.'}
+                                </p>
+                                <select
+                                    value={linkedProjectId}
+                                    onChange={(e) => setLinkedProjectId(e.target.value)}
+                                    className="form-select text-sm w-full"
+                                >
+                                    <option value="">— Standalone (no link) —</option>
+                                    {projects
+                                        .filter(p => !p.parentProjectId && p.status !== 'RETIRED')
+                                        .map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))
+                                    }
+                                </select>
                             </div>
 
                             {/* Amount + As-of Date row */}

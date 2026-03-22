@@ -64,6 +64,7 @@ export const CreateProjectSchema = z.object({
         year: z.number().int().min(2000).max(2100),
         charge: z.number().min(0),
     })).optional(),
+    parentProjectId: z.string().optional(),
 });
 
 export const UpdateProjectSchema = z.object({

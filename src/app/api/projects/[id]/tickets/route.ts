@@ -23,18 +23,28 @@ export async function GET(
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        const tickets = await prisma.jiraTicket.findMany({
-            where: { projectId: id },
-            include: {
-                assignee: {
-                    select: { id: true, name: true, email: true, role: true },
+        const [tickets, legacyChildren] = await Promise.all([
+            prisma.jiraTicket.findMany({
+                where: { projectId: id },
+                include: {
+                    assignee: {
+                        select: { id: true, name: true, email: true, role: true },
+                    },
                 },
-            },
-            orderBy: [
-                { resolutionDate: 'desc' },
-                { createdAt: 'desc' },
-            ],
-        });
+                orderBy: [
+                    { resolutionDate: 'desc' },
+                    { createdAt: 'desc' },
+                ],
+            }),
+            prisma.project.findMany({
+                where: { parentProjectId: id },
+                select: {
+                    id: true, name: true, epicKey: true,
+                    startingBalance: true, startingAmortization: true,
+                    amortizationMonths: true, launchDate: true, status: true,
+                },
+            }),
+        ]);
 
         // Compute summary stats
         const totalSP = tickets.reduce((s, t) => s + t.storyPoints, 0);
@@ -45,6 +55,7 @@ export async function GET(
         return NextResponse.json({
             project,
             tickets,
+            legacyChildren,
             summary: {
                 totalTickets: tickets.length,
                 totalStoryPoints: totalSP,

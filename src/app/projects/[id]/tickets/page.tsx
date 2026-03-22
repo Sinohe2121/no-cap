@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Ticket, Bug, CheckSquare, ListTodo, Search, X } from 'lucide-react';
+import { ArrowLeft, Ticket, Bug, CheckSquare, ListTodo, Search, X, Calendar } from 'lucide-react';
 
 interface Assignee {
     id: string;
@@ -32,9 +32,21 @@ interface ProjectInfo {
     status: string;
 }
 
+interface LegacyChild {
+    id: string;
+    name: string;
+    epicKey: string;
+    startingBalance: number;
+    startingAmortization: number;
+    amortizationMonths: number;
+    launchDate: string | null;
+    status: string;
+}
+
 interface TicketData {
     project: ProjectInfo;
     tickets: JiraTicket[];
+    legacyChildren: LegacyChild[];
     summary: {
         totalTickets: number;
         totalStoryPoints: number;
@@ -47,6 +59,10 @@ interface TicketData {
 function formatDate(dateStr: string | null) {
     if (!dateStr) return '—';
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatCurrency(amount: number) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 }
 
 const issueTypeConfig: Record<string, { icon: typeof Ticket; bg: string; color: string; label: string }> = {
@@ -207,6 +223,57 @@ export default function ProjectTicketsPage() {
                     </span>
                 </div>
             </div>
+
+            {/* Legacy Assets Section */}
+            {data.legacyChildren && data.legacyChildren.length > 0 && (
+                <div className="glass-card overflow-hidden mb-4">
+                    <div className="px-4 py-3 border-b" style={{ borderColor: '#E2E4E9', background: '#FAFBFC' }}>
+                        <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#4141A2' }}>
+                            Legacy Assets ({data.legacyChildren.length})
+                        </p>
+                    </div>
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Legacy Asset</th>
+                                <th>Type</th>
+                                <th className="text-right">Capitalized</th>
+                                <th className="text-right">Depreciation</th>
+                                <th className="text-right">Net Book Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.legacyChildren.map((legacy) => {
+                                const nbv = Math.max(0, legacy.startingBalance - legacy.startingAmortization);
+                                return (
+                                    <tr key={legacy.id}>
+                                        <td>
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="w-3.5 h-3.5" style={{ color: '#4141A2' }} />
+                                                <span className="text-sm font-semibold" style={{ color: '#3F4450' }}>{legacy.name}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className="badge text-[10px]" style={{ background: '#EDE9F7', color: '#4141A2' }}>
+                                                Legacy Asset
+                                            </span>
+                                        </td>
+                                        <td className="text-right text-sm font-mono" style={{ color: '#3F4450' }}>
+                                            {formatCurrency(legacy.startingBalance)}
+                                        </td>
+                                        <td className="text-right text-sm font-mono" style={{ color: '#717684' }}>
+                                            {formatCurrency(legacy.startingAmortization)}
+                                        </td>
+                                        <td className="text-right text-sm font-mono font-semibold" style={{ color: nbv > 0 ? '#21944E' : '#A4A9B6' }}>
+                                            {formatCurrency(nbv)}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             {/* Tickets Table */}
             <div className="glass-card overflow-hidden">

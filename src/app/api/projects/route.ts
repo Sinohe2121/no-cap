@@ -22,6 +22,13 @@ export async function GET() {
                         where: { entryType: 'AMORTIZATION' },
                         select: { amount: true },
                     },
+                    legacyChildren: {
+                        select: {
+                            id: true, name: true, startingBalance: true,
+                            startingAmortization: true, amortizationMonths: true,
+                            launchDate: true, status: true,
+                        },
+                    },
                 },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -144,6 +151,8 @@ export async function GET() {
                 ticketCount: p._count.tickets,
                 storyPoints,
                 bugCount,
+                parentProjectId: (p as any).parentProjectId || null,
+                legacyChildren: (p as any).legacyChildren || [],
             };
         });
 
@@ -165,7 +174,7 @@ export async function POST(request: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
         }
-        const { name, description, epicKey, status, isCapitalizable, amortizationMonths, startDate, launchDate, startingBalance, startingAmortization, amortizationSchedule } = parsed.data;
+        const { name, description, epicKey, status, isCapitalizable, amortizationMonths, startDate, launchDate, startingBalance, startingAmortization, amortizationSchedule, parentProjectId } = parsed.data;
 
         // Auto-generate epicKey for legacy projects if not provided
         const finalEpicKey = epicKey || `LEGACY-${Date.now().toString(36).toUpperCase().slice(-5)}`;
@@ -182,6 +191,7 @@ export async function POST(request: Request) {
                 launchDate: launchDate ? new Date(launchDate) : null,
                 startingBalance,
                 startingAmortization,
+                ...(parentProjectId && { parentProjectId }),
             },
         });
 
