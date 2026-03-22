@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { calculatePeriodCosts } from '@/lib/calculations';
 import prisma from '@/lib/prisma';

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import prisma from '@/lib/prisma';
