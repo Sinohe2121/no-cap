@@ -163,18 +163,21 @@ export async function GET(request: Request) {
             .slice(0, 5);
 
         // Alerts: only flag genuinely actionable issues
-        // Amortization is ticket-level (based on ticket resolutionDate), not project-level.
-        // LIVE status is normal — no alerts needed for properly operating projects.
         const alerts: { id: string; name: string; message: string; severity: string }[] = [];
 
-        // Flag capitalizable projects that have zero capitalized tickets
-        // (may indicate no journal entries have been generated yet)
+        // Single query to get capitalizable ticket counts per project (avoids N+1)
+        const capTicketCounts = await prisma.jiraTicket.groupBy({
+            by: ['projectId'],
+            where: { capitalizedAmount: { gt: 0 } },
+            _count: { id: true },
+        });
+        const capCountByProject = new Map(
+            capTicketCounts.map(r => [r.projectId, r._count.id])
+        );
+
         for (const p of projects) {
             if (p.isCapitalizable && p.status === 'LIVE') {
-                const capTicketCount = await prisma.jiraTicket.count({
-                    where: { projectId: p.id, capitalizedAmount: { gt: 0 } },
-                });
-                if (capTicketCount === 0) {
+                if ((capCountByProject.get(p.id) || 0) === 0) {
                     alerts.push({
                         id: p.id,
                         name: p.name,
