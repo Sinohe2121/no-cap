@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -13,7 +13,7 @@ const GoogleIcon = () => (
     </svg>
 );
 
-export default function LoginPage() {
+function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [email, setEmail] = useState('');
@@ -192,5 +192,17 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F6F6F9' }}>
+                <div style={{ width: 32, height: 32, border: '3px solid #E2E4E9', borderTopColor: '#4141A2', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            </div>
+        }>
+            <LoginContent />
+        </Suspense>
     );
 }
