@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { useEffect, useState, useRef } from 'react';
 import {
     LayoutDashboard,
@@ -16,6 +17,7 @@ import {
     UsersRound,
     ChevronLeft,
     ChevronRight,
+    LogOut,
     CalendarDays,
     ChevronDown,
     Check,
@@ -434,6 +436,43 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
             {/* ── Period Selector ── */}
             <SidebarPeriodSelector collapsed={collapsed} />
+
+            {/* ── Sign Out ── */}
+            <div style={{ padding: collapsed ? '0 10px' : '0 16px', marginBottom: 8 }}>
+                <button
+                    onClick={() => signOut({ callbackUrl: '/login' })}
+                    title="Sign out"
+                    style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: collapsed ? 'center' : 'flex-start',
+                        gap: 8,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 10,
+                        padding: collapsed ? '10px 0' : '9px 12px',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: '#A4A9B6',
+                        transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(250,67,56,0.12)';
+                        e.currentTarget.style.color = '#FA4338';
+                        e.currentTarget.style.borderColor = 'rgba(250,67,56,0.25)';
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                        e.currentTarget.style.color = '#A4A9B6';
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                    }}
+                >
+                    <LogOut style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    {!collapsed && <span>Sign Out</span>}
+                </button>
+            </div>
 
             {/* ── Footer Card ── */}
             {!collapsed && (
