@@ -588,15 +588,15 @@ export default function UsersPage() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: '#717684' }}>Temporary Password</label>
+                                    <label className="block text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: '#717684' }}>Password <span className="normal-case font-semibold" style={{ color: '#A4A9B6' }}>(optional)</span></label>
                                     <input 
                                         type="text" 
-                                        required 
                                         className="form-input text-[13px] font-bold tracking-widest w-full font-mono" 
-                                        placeholder="Password123!"
+                                        placeholder="Leave blank for Google SSO"
                                         value={createForm.password} 
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))} 
                                     />
+                                    <p className="text-[10px] mt-1.5" style={{ color: '#A4A9B6' }}>Google OAuth users don&apos;t need a password</p>
                                 </div>
                                 <div>
                                     <label className="block text-[11px] font-black uppercase tracking-widest mb-2" style={{ color: '#717684' }}>Role</label>

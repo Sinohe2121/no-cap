@@ -9,7 +9,7 @@ export const CreateUserSchema = z.object({
     email: z.string().email('Invalid email address'),
     name: z.string().min(1, 'Name is required'),
     role: z.string().min(1, 'Role is required'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
+    password: z.string().min(8, 'Password must be at least 8 characters').optional(),
 });
 
 const AdminConfigSchema = z.object({

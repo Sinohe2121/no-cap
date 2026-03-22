@@ -117,13 +117,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid role specified.' }, { status: 400 });
         }
 
-        // S6: Validate password complexity
-        const passwordError = validatePassword(password);
-        if (passwordError) {
-            return NextResponse.json({ error: passwordError }, { status: 400 });
+        // Password is optional — Google OAuth users don't need one
+        let passwordHash: string;
+        if (password) {
+            const passwordError = validatePassword(password);
+            if (passwordError) {
+                return NextResponse.json({ error: passwordError }, { status: 400 });
+            }
+            passwordHash = await bcrypt.hash(password, 12);
+        } else {
+            // Random hash — user will authenticate via Google only
+            passwordHash = await bcrypt.hash(crypto.randomUUID(), 12);
         }
-
-        const passwordHash = await bcrypt.hash(password, 12);
 
         const targetUser = await prisma.user.create({
             data: {
