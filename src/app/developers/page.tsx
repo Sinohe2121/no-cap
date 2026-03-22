@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Users, FileSpreadsheet, ArrowRight, Activity } from 'lucide-react';
+import { Users, FileSpreadsheet, ArrowRight, Activity, ChevronDown } from 'lucide-react';
 import { usePeriod } from '@/context/PeriodContext';
 import { Card } from '@/components/ui/Card';
 import { DONUT_COLORS, TOOLTIP_STYLE } from '@/lib/chartColors';
@@ -26,6 +26,11 @@ interface VelocityRow {
     weeklyPoints: number[];
     totalSP: number;
     trend: 'up' | 'down' | 'flat';
+    ticketsResolved: number;
+    avgCycleTime: number;
+    capRatio: number;
+    loadedCost: number;
+    role: string;
 }
 
 interface GridDataPoint {
@@ -71,6 +76,7 @@ export default function DevelopersDashboardPage() {
     const [gridData, setGridData] = useState<GridDataPoint[]>([]);
     const [donutData, setDonutData] = useState<{name: string, value: number}[]>([]);
     const [velocityData, setVelocityData] = useState<VelocityRow[]>([]);
+    const [expandedDevId, setExpandedDevId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const { apiParams, range, preset } = usePeriod();
 
@@ -272,7 +278,28 @@ export default function DevelopersDashboardPage() {
                     const secondHalf = weekly.slice(4).reduce((a, b) => a + b, 0);
                     const trend: 'up' | 'down' | 'flat' = secondHalf > firstHalf * 1.15 ? 'up' : secondHalf < firstHalf * 0.85 ? 'down' : 'flat';
 
-                    return { devId: d.id, devName: d.name || 'Unknown', weeklyPoints: weekly, totalSP, trend };
+                    // Per-developer scorecard metrics
+                    const resolved = devTicks.filter((t: any) => t.resolutionDate);
+                    const ticketsResolved = resolved.length;
+                    const cycleTimes = resolved.map((t: any) => {
+                        const jiraCreated = t.customFields?.Created;
+                        const c = new Date(jiraCreated || t.createdAt).getTime();
+                        const r = new Date(t.resolutionDate).getTime();
+                        return Math.max(0, (r - c) / (1000 * 60 * 60 * 24));
+                    }).filter((d: number) => d > 0 && d < 365);
+                    const avgCycleTime = cycleTimes.length > 0
+                        ? Math.round((cycleTimes.reduce((a: number, b: number) => a + b, 0) / cycleTimes.length) * 10) / 10
+                        : 0;
+
+                    const capTickets = devTicks.filter((t: any) => {
+                        const proj = t.project;
+                        return proj?.isCapitalizable && t.issueType === 'STORY';
+                    }).length;
+                    const capRatio = devTicks.length > 0 ? Math.round((capTickets / devTicks.length) * 100) : 0;
+                    const loadedCost = (d as any).loadedCost || (d as any).periodCost || 0;
+                    const role = (d as any).role || 'ENG';
+
+                    return { devId: d.id, devName: d.name || 'Unknown', weeklyPoints: weekly, totalSP, trend, ticketsResolved, avgCycleTime, capRatio, loadedCost, role };
                 })
                 .filter(v => v.totalSP > 0)
                 .sort((a, b) => b.totalSP - a.totalSP);
@@ -440,83 +467,238 @@ export default function DevelopersDashboardPage() {
 
             </div>
 
-            {/* Developer Velocity Sparklines */}
-            {velocityData.length > 0 && (
-                <div className="fintech-card p-6 mb-8">
-                    <div className="flex justify-between items-center mb-5">
-                        <div>
-                            <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-[#4141A2]" /> Developer Velocity
-                            </h2>
-                            <p className="text-[12px] text-[#A4A9B6] mt-1">Story points resolved per week — trailing 8-week trend</p>
+            {/* Developer Velocity Sparklines with Expandable Scorecards */}
+            {velocityData.length > 0 && (() => {
+                const maxSP = Math.max(...velocityData.map(r => Math.max(...r.weeklyPoints)), 1);
+                // Team composition for the donut
+                const roleMap: Record<string, number> = {};
+                for (const v of velocityData) {
+                    const label = v.role === 'ENG' ? 'Engineering' : v.role === 'PRODUCT' ? 'Product' : v.role === 'DESIGN' ? 'Design' : v.role || 'Other';
+                    roleMap[label] = (roleMap[label] || 0) + 1;
+                }
+                const teamDonut = Object.entries(roleMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+                const TEAM_COLORS = ['#4141A2', '#21944E', '#F5A623', '#FA4338', '#717684'];
+                const avgSP = velocityData.length > 0 ? Math.round((velocityData.reduce((s, v) => s + v.totalSP, 0) / velocityData.length) * 10) / 10 : 0;
+                const topPerformer = velocityData[0]?.devName || '—';
+
+                return (
+                    <div className="fintech-card p-6 mb-8">
+                        <div className="flex justify-between items-center mb-5">
+                            <div>
+                                <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase flex items-center gap-2">
+                                    <Activity className="w-4 h-4 text-[#4141A2]" /> Developer Velocity
+                                </h2>
+                                <p className="text-[12px] text-[#A4A9B6] mt-1">Story points resolved per week — trailing 8-week trend · click to expand</p>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        {velocityData.map((v, idx) => {
-                            const maxSP = Math.max(...velocityData.map(r => Math.max(...r.weeklyPoints)), 1);
-                            const formattedSP = Number.isInteger(v.totalSP) ? v.totalSP : Math.round(v.totalSP * 10) / 10;
-                            return (
-                                <div
-                                    key={v.devId}
-                                    className="flex items-center gap-4 px-4 py-3 transition-colors"
-                                    style={{
-                                        background: idx % 2 === 0 ? '#FAFBFC' : 'transparent',
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    {/* Name */}
-                                    <Link href={`/developers/${v.devId}`} className="w-44 text-[13px] font-semibold no-underline truncate" style={{ color: '#3F4450' }}>
-                                        {v.devName}
-                                    </Link>
 
-                                    {/* Sparkline */}
-                                    <div className="flex-1" style={{ maxWidth: 240 }}>
-                                        <div className="flex items-end gap-1" style={{ height: 32 }}>
-                                            {v.weeklyPoints.map((sp, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="flex-1 rounded-sm transition-all"
+                        <div className="flex gap-6">
+                            {/* Left: Velocity List */}
+                            <div className="flex-1 min-w-0">
+                                {velocityData.map((v, idx) => {
+                                    const formattedSP = Number.isInteger(v.totalSP) ? v.totalSP : Math.round(v.totalSP * 10) / 10;
+                                    const isExpanded = expandedDevId === v.devId;
+
+                                    return (
+                                        <div key={v.devId}>
+                                            <div
+                                                className="flex items-center gap-4 px-4 py-3 transition-all cursor-pointer"
+                                                style={{
+                                                    background: isExpanded ? '#F0EEFF' : idx % 2 === 0 ? '#FAFBFC' : 'transparent',
+                                                    borderRadius: isExpanded ? '8px 8px 0 0' : 8,
+                                                }}
+                                                onClick={() => setExpandedDevId(isExpanded ? null : v.devId)}
+                                            >
+                                                {/* Expand chevron */}
+                                                <ChevronDown
+                                                    className="w-3.5 h-3.5 transition-transform flex-shrink-0"
                                                     style={{
-                                                        height: maxSP > 0 ? Math.max(3, (sp / maxSP) * 32) : 3,
-                                                        background: sp > 0
-                                                            ? `rgba(65, 65, 162, ${0.3 + (sp / maxSP) * 0.7})`
-                                                            : '#EEF0F4',
-                                                        minWidth: 8,
+                                                        color: '#A4A9B6',
+                                                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                                                     }}
-                                                    title={`Week ${i + 1}: ${sp} SP`}
                                                 />
-                                            ))}
+
+                                                {/* Name */}
+                                                <Link
+                                                    href={`/developers/${v.devId}`}
+                                                    className="w-40 text-[13px] font-semibold no-underline truncate"
+                                                    style={{ color: '#3F4450' }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {v.devName}
+                                                </Link>
+
+                                                {/* Sparkline */}
+                                                <div className="flex-1" style={{ maxWidth: 200 }}>
+                                                    <div className="flex items-end gap-1" style={{ height: 28 }}>
+                                                        {v.weeklyPoints.map((sp, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="flex-1 rounded-sm transition-all"
+                                                                style={{
+                                                                    height: maxSP > 0 ? Math.max(3, (sp / maxSP) * 28) : 3,
+                                                                    background: sp > 0
+                                                                        ? `rgba(65, 65, 162, ${0.3 + (sp / maxSP) * 0.7})`
+                                                                        : '#EEF0F4',
+                                                                    minWidth: 6,
+                                                                }}
+                                                                title={`Week ${i + 1}: ${sp} SP`}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Total SP */}
+                                                <div className="w-20 text-right tabular-nums">
+                                                    <span className="text-[14px] font-bold" style={{ color: '#3F4450' }}>{formattedSP}</span>
+                                                    <span className="text-[10px] font-semibold ml-1" style={{ color: '#A4A9B6' }}>SP</span>
+                                                </div>
+
+                                                {/* Trend */}
+                                                <div className="w-8 flex justify-center">
+                                                    {v.trend === 'up' && <ArrowRight className="w-3.5 h-3.5 -rotate-45" style={{ color: '#21944E' }} />}
+                                                    {v.trend === 'down' && <ArrowRight className="w-3.5 h-3.5 rotate-45" style={{ color: '#FA4338' }} />}
+                                                    {v.trend === 'flat' && <ArrowRight className="w-3.5 h-3.5" style={{ color: '#A4A9B6' }} />}
+                                                </div>
+                                            </div>
+
+                                            {/* Expanded Scorecard */}
+                                            {isExpanded && (
+                                                <div
+                                                    className="px-4 pb-4 pt-2 flex items-center gap-6"
+                                                    style={{
+                                                        background: '#F8F7FF',
+                                                        borderRadius: '0 0 8px 8px',
+                                                        borderTop: '1px solid #E8E6F5',
+                                                    }}
+                                                >
+                                                    {/* Initials Avatar */}
+                                                    <div
+                                                        className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                                                        style={{ background: '#4141A2', color: '#fff', fontSize: 14, fontWeight: 800, letterSpacing: '0.03em' }}
+                                                    >
+                                                        {v.devName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                                    </div>
+
+                                                    {/* Role Badge */}
+                                                    <div className="flex flex-col gap-1 flex-shrink-0">
+                                                        <span className="text-[13px] font-bold" style={{ color: '#3F4450' }}>{v.devName}</span>
+                                                        <span
+                                                            className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full w-fit"
+                                                            style={{ background: '#E8E6F5', color: '#4141A2' }}
+                                                        >
+                                                            {v.role}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Cap Ratio Ring */}
+                                                    <div className="flex flex-col items-center flex-shrink-0" style={{ minWidth: 64 }}>
+                                                        <svg width="48" height="48" viewBox="0 0 48 48">
+                                                            <circle cx="24" cy="24" r="18" fill="none" stroke="#EEF0F4" strokeWidth="5" />
+                                                            <circle
+                                                                cx="24" cy="24" r="18" fill="none"
+                                                                stroke="#4141A2" strokeWidth="5"
+                                                                strokeDasharray={`${(v.capRatio / 100) * 113.1} 113.1`}
+                                                                strokeLinecap="round"
+                                                                transform="rotate(-90 24 24)"
+                                                            />
+                                                            <text x="24" y="26" textAnchor="middle" fontSize="11" fontWeight="800" fill="#3F4450">
+                                                                {v.capRatio}%
+                                                            </text>
+                                                        </svg>
+                                                        <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: '#A4A9B6' }}>Cap</span>
+                                                    </div>
+
+                                                    {/* Metric Pills */}
+                                                    <div className="flex gap-3 flex-1">
+                                                        <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.ticketsResolved}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Tickets</span>
+                                                        </div>
+                                                        <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.avgCycleTime > 0 ? `${v.avgCycleTime}d` : '—'}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Avg Cycle</span>
+                                                        </div>
+                                                        <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
+                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.loadedCost > 0 ? formatShortCurrency(v.loadedCost) : '—'}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Loaded Cost</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
+                                    );
+                                })}
+                            </div>
 
-                                    {/* Total SP */}
-                                    <div className="w-20 text-right tabular-nums">
-                                        <span className="text-[14px] font-bold" style={{ color: '#3F4450' }}>{formattedSP}</span>
-                                        <span className="text-[10px] font-semibold ml-1" style={{ color: '#A4A9B6' }}>SP</span>
+                            {/* Right: Team Composition Donut */}
+                            <div className="flex flex-col items-center justify-start flex-shrink-0" style={{ width: 200 }}>
+                                <h3 className="text-[10px] font-extrabold text-[#A4A9B6] tracking-widest uppercase mb-3">Team Composition</h3>
+                                <ResponsiveContainer width={160} height={160}>
+                                    <PieChart>
+                                        <Pie
+                                            data={teamDonut}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%" cy="50%"
+                                            innerRadius={45}
+                                            outerRadius={70}
+                                            strokeWidth={2}
+                                            stroke="#fff"
+                                        >
+                                            {teamDonut.map((_, i) => (
+                                                <Cell key={i} fill={TEAM_COLORS[i % TEAM_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            contentStyle={{ ...TOOLTIP_STYLE, padding: 8, fontSize: 11 }}
+                                            formatter={(value: number | undefined) => [value ?? 0, 'Devs']}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="text-center -mt-2 mb-3">
+                                    <span className="text-[22px] font-black" style={{ color: '#3F4450' }}>{velocityData.length}</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: '#A4A9B6' }}>Active Devs</span>
+                                </div>
+                                {/* Legend */}
+                                <div className="flex flex-col gap-1.5 w-full px-2">
+                                    {teamDonut.map((entry, i) => (
+                                        <div key={entry.name} className="flex items-center justify-between text-[11px]">
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: TEAM_COLORS[i % TEAM_COLORS.length] }} />
+                                                <span className="font-semibold" style={{ color: '#3F4450' }}>{entry.name}</span>
+                                            </span>
+                                            <span className="font-bold" style={{ color: '#717684' }}>{entry.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* Summary Stats */}
+                                <div className="mt-4 pt-3 border-t border-[#EEF0F4] w-full flex flex-col gap-2 px-2">
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Avg SP/Dev</span>
+                                        <span className="font-black" style={{ color: '#3F4450' }}>{avgSP}</span>
                                     </div>
-
-                                    {/* Trend */}
-                                    <div className="w-8 flex justify-center">
-                                        {v.trend === 'up' && <ArrowRight className="w-3.5 h-3.5 -rotate-45" style={{ color: '#21944E' }} />}
-                                        {v.trend === 'down' && <ArrowRight className="w-3.5 h-3.5 rotate-45" style={{ color: '#FA4338' }} />}
-                                        {v.trend === 'flat' && <ArrowRight className="w-3.5 h-3.5" style={{ color: '#A4A9B6' }} />}
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Top Performer</span>
+                                        <span className="font-black truncate ml-2" style={{ color: '#4141A2', maxWidth: 80 }}>{topPerformer.split(',')[0]}</span>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-[#F0F0F5] flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
-                            <span>Older ← → Recent</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
-                            <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 -rotate-45" style={{ color: '#21944E' }} /> Accelerating</span>
-                            <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 rotate-45" style={{ color: '#FA4338' }} /> Decelerating</span>
-                            <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3" style={{ color: '#A4A9B6' }} /> Steady</span>
+
+                        <div className="mt-4 pt-3 border-t border-[#F0F0F5] flex items-center justify-between">
+                            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
+                                <span>Older ← → Recent</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
+                                <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 -rotate-45" style={{ color: '#21944E' }} /> Accelerating</span>
+                                <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 rotate-45" style={{ color: '#FA4338' }} /> Decelerating</span>
+                                <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3" style={{ color: '#A4A9B6' }} /> Steady</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
         </div>
     );
