@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import type { AuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
 
@@ -34,12 +35,43 @@ export const authOptions: AuthOptions = {
                 };
             },
         }),
+        // Google OAuth — only allows users whose email already exists in the User table
+        ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+            ? [GoogleProvider({
+                clientId: process.env.GOOGLE_CLIENT_ID,
+                clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+              })]
+            : []),
     ],
     callbacks: {
-        async jwt({ token, user }) {
-            if (user) {
+        async signIn({ user, account }) {
+            // For OAuth providers (Google), verify the email exists in our User table
+            if (account?.provider === 'google') {
+                if (!user.email) return false;
+                const dbUser = await prisma.user.findUnique({
+                    where: { email: user.email.toLowerCase().trim() },
+                });
+                if (!dbUser) {
+                    // Reject — email not provisioned by admin
+                    return '/login?error=NoAccount';
+                }
+            }
+            return true;
+        },
+        async jwt({ token, user, account }) {
+            if (user && account?.provider === 'credentials') {
+                // Credentials login — role comes from authorize()
                 token.id = user.id;
                 token.role = (user as { role?: string }).role ?? 'VIEWER';
+            } else if (account?.provider === 'google' && user?.email) {
+                // Google login — look up role from DB
+                const dbUser = await prisma.user.findUnique({
+                    where: { email: user.email.toLowerCase().trim() },
+                });
+                if (dbUser) {
+                    token.id = dbUser.id;
+                    token.role = dbUser.role;
+                }
             }
             return token;
         },
