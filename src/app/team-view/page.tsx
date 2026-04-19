@@ -195,7 +195,7 @@ export default function TeamViewPage() {
                                 <button
                                     onClick={() => toggle(team.projectId)}
                                     className="w-full flex items-center justify-between px-6 py-4 text-left"
-                                    style={{ background: isOpen ? '#FAFBFC' : 'transparent', borderBottom: isOpen ? '1px solid #E2E4E9' : 'none', cursor: 'pointer', border: 'none' }}
+                                    style={{ background: isOpen ? '#FAFBFC' : 'transparent', borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: isOpen ? '1px solid #E2E4E9' : 'none', cursor: 'pointer' }}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#EEF2FF' }}>
