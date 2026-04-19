@@ -85,9 +85,12 @@ export default function RollForwardPage() {
                 // Default: start = inception, end = latest period
                 if (opts.length > 0) {
                     setEndPeriod(opts[opts.length - 1].value);
+                } else {
+                    // No periods with entries — stop loading
+                    setLoading(false);
                 }
             })
-            .catch(() => {});
+            .catch(() => setLoading(false));
     }, []);
 
     // Fetch roll-forward data when period selection changes
