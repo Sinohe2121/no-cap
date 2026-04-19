@@ -272,9 +272,17 @@ export default function JournalEntriesPage() {
     };
 
     const showAudit = async (entryId: string) => {
-        const res = await fetch(`/api/accounting/${entryId}`);
-        const data = await res.json();
-        setAuditDetail(data);
+        try {
+            const res = await fetch(`/api/accounting/${entryId}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.error || !data.id) return;
+            // Ensure auditTrails is always an array
+            data.auditTrails = data.auditTrails || [];
+            setAuditDetail(data);
+        } catch {
+            // silently ignore
+        }
     };
 
     const showPayrollAudit = async (month: number, year: number) => {
