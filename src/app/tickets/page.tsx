@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, X, Filter, ArrowLeft } from 'lucide-react';
+import { JiraTicketSlideOver } from '@/components/JiraTicketSlideOver';
 
 interface TicketData {
     id: string;
@@ -19,7 +20,7 @@ interface TicketData {
     assignee: { id: string; name: string; role: string; isActive: boolean } | null;
     project: { id: string; name: string; status: string; epicKey: string; isCapitalizable: boolean } | null;
     allocatedCost: number;
-    capitalizedAmount: number;
+    allocatedAmount: number;
     amortizationMonths: number;
 }
 
@@ -40,6 +41,8 @@ const issueTypeStyle: Record<string, { bg: string; color: string }> = {
 export default function TicketsPage() {
     const router = useRouter();
     const [tickets, setTickets] = useState<TicketData[]>([]);
+    const [bugSpFallback, setBugSpFallback]   = useState(1);
+    const [otherSpFallback, setOtherSpFallback] = useState(1);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('ALL');
@@ -48,11 +51,16 @@ export default function TicketsPage() {
     const [hasStoryPoints, setHasStoryPoints] = useState(false);
     const [hasAllocatedCost, setHasAllocatedCost] = useState(false);
     const [tab, setTab] = useState<'active' | 'closed'>('active');
+    const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
 
     useEffect(() => {
         fetch('/api/tickets')
-            .then((res) => res.json())
-            .then((data) => setTickets(data.tickets))
+            .then((res) => res.ok ? res.json() : { tickets: [] })
+            .then((data) => {
+                setTickets(data.tickets ?? []);
+                if (typeof data.bugSpFallback === 'number')  setBugSpFallback(data.bugSpFallback);
+                if (typeof data.otherSpFallback === 'number') setOtherSpFallback(data.otherSpFallback);
+            })
             .finally(() => setLoading(false));
     }, []);
 
@@ -83,7 +91,11 @@ export default function TicketsPage() {
         return list;
     }, [currentList, search, typeFilter, projectFilter, assigneeFilter, hasStoryPoints, hasAllocatedCost]);
 
+    const getAppliedSP = (t: TicketData) =>
+        t.storyPoints > 0 ? t.storyPoints : (t.issueType === 'BUG' ? bugSpFallback : otherSpFallback);
+
     const totalSP = filtered.reduce((s, t) => s + t.storyPoints, 0);
+    const totalAppliedSP = filtered.reduce((s, t) => s + getAppliedSP(t), 0);
     const totalCost = filtered.reduce((s, t) => s + t.allocatedCost, 0);
     const hasFilters = search || typeFilter !== 'ALL' || projectFilter !== 'ALL' || assigneeFilter !== 'ALL' || hasStoryPoints || hasAllocatedCost;
 
@@ -211,13 +223,15 @@ export default function TicketsPage() {
                     )}
                 </div>
 
-                {/* Summary bar */}
                 <div className="flex items-center gap-6 mt-3 pt-3" style={{ borderTop: '1px solid #E2E4E9' }}>
                     <span className="text-xs" style={{ color: '#A4A9B6' }}>
                         <span className="font-semibold" style={{ color: '#3F4450' }}>{filtered.length}</span> tickets
                     </span>
                     <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                        <span className="font-semibold" style={{ color: '#4141A2' }}>{totalSP}</span> story points
+                        Jira SP: <span className="font-semibold" style={{ color: '#717684' }}>{totalSP}</span>
+                    </span>
+                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
+                        Applied SP: <span className="font-semibold" style={{ color: '#4141A2' }}>{totalAppliedSP}</span>
                     </span>
                     <span className="text-xs" style={{ color: '#A4A9B6' }}>
                         <span className="font-semibold" style={{ color: '#21944E' }}>{formatCurrency(totalCost)}</span> allocated cost
@@ -236,7 +250,8 @@ export default function TicketsPage() {
                                 <th>Type</th>
                                 <th>Project</th>
                                 <th>Assignee</th>
-                                <th className="text-right">Story Pts</th>
+                                <th className="text-right">Jira SP</th>
+                                <th className="text-right">Applied SP</th>
                                 <th className="text-right">Allocated Cost</th>
                                 <th>Resolved</th>
                                 <th>Depr. Start</th>
@@ -248,7 +263,7 @@ export default function TicketsPage() {
                         <tbody>
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={12} className="text-center" style={{ padding: '40px 0', color: '#A4A9B6' }}>
+                                    <td colSpan={13} className="text-center" style={{ padding: '40px 0', color: '#A4A9B6' }}>
                                         No tickets found
                                     </td>
                                 </tr>
@@ -258,7 +273,28 @@ export default function TicketsPage() {
                                 return (
                                     <tr key={t.id} onClick={() => router.push(`/tickets/${t.id}`)} style={{ cursor: 'pointer' }}>
                                         <td>
-                                            <span className="font-mono text-xs font-semibold" style={{ color: '#4141A2' }}>{t.ticketId}</span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedTicketKey(t.ticketId);
+                                                }}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    padding: 0,
+                                                    cursor: 'pointer',
+                                                    fontFamily: 'Menlo, Monaco, Courier New, monospace',
+                                                    fontSize: 12,
+                                                    fontWeight: 700,
+                                                    color: '#4141A2',
+                                                    textDecoration: 'underline',
+                                                    textDecorationStyle: 'dotted',
+                                                    textUnderlineOffset: 3,
+                                                }}
+                                                title="Preview in Jira"
+                                            >
+                                                {t.ticketId}
+                                            </button>
                                         </td>
                                         <td>
                                             <span className="text-xs" style={{ color: '#3F4450', maxWidth: 320, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -280,7 +316,34 @@ export default function TicketsPage() {
                                             )}
                                         </td>
                                         <td className="text-xs" style={{ color: '#717684' }}>{t.assignee?.name || 'Unassigned'}</td>
-                                        <td className="text-right text-xs font-semibold" style={{ color: '#3F4450' }}>{t.storyPoints}</td>
+                                        {/* Jira SP — raw from import */}
+                                        <td className="text-right text-xs font-semibold" style={{ color: t.storyPoints > 0 ? '#3F4450' : '#A4A9B6' }}>
+                                            {t.storyPoints}
+                                        </td>
+                                        {/* Applied SP — uses fallback when Jira SP is 0 */}
+                                        {(() => {
+                                            const applied = getAppliedSP(t);
+                                            const isFallback = t.storyPoints === 0;
+                                            return (
+                                                <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
+                                                    <span
+                                                        className="text-xs font-semibold"
+                                                        style={{ color: isFallback ? '#7B61FF' : '#3F4450' }}
+                                                        title={isFallback ? `Fallback applied (Jira SP was 0)` : 'From Jira'}
+                                                    >
+                                                        {applied}
+                                                    </span>
+                                                    {isFallback && (
+                                                        <span
+                                                            className="ml-1 text-[10px] font-bold uppercase px-1 py-0.5 rounded"
+                                                            style={{ background: '#F3F0FF', color: '#7B61FF' }}
+                                                        >
+                                                            est
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            );
+                                        })()}
                                         <td className="text-right text-xs font-semibold" style={{ color: t.allocatedCost > 0 ? '#21944E' : '#A4A9B6' }}>
                                             {t.allocatedCost > 0 ? formatCurrency(t.allocatedCost) : '—'}
                                         </td>
@@ -308,6 +371,12 @@ export default function TicketsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Jira ticket preview slide-over */}
+            <JiraTicketSlideOver
+                ticketKey={selectedTicketKey}
+                onClose={() => setSelectedTicketKey(null)}
+            />
         </div>
     );
 }

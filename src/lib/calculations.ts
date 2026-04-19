@@ -7,8 +7,10 @@ export interface PeriodCostResult {
     capPoints: number;
     expPoints: number;
     capRatio: number;
-    loadedCost: number;
-    capitalizedAmount: number;
+    loadedCost: number;        // gross fully-loaded cost (before meeting adjustment)
+    meetingAdjustment: number; // loadedCost × meetingTimeRate
+    netCost: number;           // loadedCost − meetingAdjustment — used for ticket allocation
+    allocatedAmount: number;
     expensedAmount: number;
     projectBreakdown: {
         projectId: string;
@@ -16,6 +18,10 @@ export interface PeriodCostResult {
         points: number;
         amount: number;
         isCapitalizable: boolean;
+        bugPoints: number;   // story points from BUG tickets
+        taskPoints: number;  // story points from TASK/EPIC/SUBTASK tickets
+        bugAmount: number;   // developer cost attributable to bugs
+        taskAmount: number;  // developer cost attributable to tasks/epics/subtasks
     }[];
 }
 
@@ -32,12 +38,25 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
 
     const developers = await prisma.developer.findMany({ where: { isActive: true } });
 
-    const [fringeConfig, standardConfig] = await Promise.all([
+    const [fringeConfig, standardConfig, meetingConfig, bugSpConfig, otherSpConfig] = await Promise.all([
         prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
         prisma.globalConfig.findUnique({ where: { key: 'ACCOUNTING_STANDARD' } }),
+        prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
+        prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+        prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
     ]);
-    const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+    const globalFringeRate   = fringeConfig  ? parseFloat(fringeConfig.value)  : 0.25;
     const accountingStandard = standardConfig?.value || 'ASC_350_40';
+    const globalMeetingRate  = meetingConfig  ? parseFloat(meetingConfig.value)  : 0;
+    const bugSpFallback      = parseFloat(bugSpConfig?.value  ?? '1') || 1;
+    const otherSpFallback    = parseFloat(otherSpConfig?.value ?? '1') || 1;
+
+    /** Applied SP: uses Jira value if > 0, otherwise returns the appropriate fallback */
+    const appliedSP = (ticket: { storyPoints: number; issueType: string }) =>
+        ticket.storyPoints > 0
+            ? ticket.storyPoints
+            : ticket.issueType.toUpperCase() === 'BUG' ? bugSpFallback : otherSpFallback;
+
 
     // Fetch payroll imports for this period to get actual salary data
     const payrollImports = await prisma.payrollImport.findMany({
@@ -80,28 +99,89 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
     const results: PeriodCostResult[] = [];
 
     for (const dev of developers) {
+        // Always compute payroll cost — even if the dev has no tickets this period.
+        // Their payroll must still be captured; it will go to the UNALLOCATED bucket.
+        const fringeRate = dev.fringeBenefitRate ?? globalFringeRate;
+        const salary = payrollSalaryByDev[dev.id] ?? dev.monthlySalary ?? 0;
+        const sbc = dev.stockCompAllocation ?? 0;
+        const loadedCost = salary + (salary * fringeRate) + sbc;
+        const meetingAdjustment = loadedCost * globalMeetingRate;
+        const netCost = loadedCost - meetingAdjustment;
+
+        if (loadedCost <= 0) continue; // truly zero-cost dev (e.g. not in payroll and no base salary)
+
         const tickets = ticketsByDev.get(dev.id) ?? [];
-        if (tickets.length === 0) continue;
+        const totalPoints = tickets.reduce((sum, t) => sum + appliedSP(t), 0);
 
-        const totalPoints = tickets.reduce((sum, t) => sum + t.storyPoints, 0);
-        if (totalPoints === 0) continue;
+        // If no tickets at all, all cost is unallocated expense
+        if (tickets.length === 0 || totalPoints === 0) {
+            results.push({
+                developerId: dev.id,
+                developerName: dev.name,
+                totalPoints: 0,
+                capPoints: 0,
+                expPoints: 0,
+                capRatio: 0,
+                loadedCost,
+                meetingAdjustment,
+                netCost,
+                allocatedAmount: 0,
+                expensedAmount: netCost,
+                projectBreakdown: [{
+                    projectId: '__UNALLOCATED__',
+                    projectName: 'Unallocated Labor',
+                    points: 0,
+                    isCapitalizable: false,
+                    bugPoints: 0,
+                    taskPoints: 1, // non-zero so taskAmount gets computed
+                    amount: netCost,
+                    bugAmount: 0,
+                    taskAmount: netCost,
+                }],
+            });
+            continue;
+        }
 
-        const projectMap: Record<string, { projectId: string; projectName: string; points: number; isCapitalizable: boolean }> = {};
+        const projectMap: Record<string, { projectId: string; projectName: string; points: number; isCapitalizable: boolean; bugPoints: number; taskPoints: number }> = {};
 
         let capPoints = 0;
         let expPoints = 0;
 
         for (const ticket of tickets) {
-            if (!ticket.project || !ticket.projectId) continue;
+            const issueType = ticket.issueType.toUpperCase();
+
+            // Tickets with no project go to UNALLOCATED bucket
+            if (!ticket.project || !ticket.projectId) {
+                const key = '__UNALLOCATED__::exp';
+                if (!projectMap[key]) {
+                    projectMap[key] = {
+                        projectId: '__UNALLOCATED__',
+                        projectName: 'Unallocated Labor',
+                        points: 0,
+                        isCapitalizable: false,
+                        bugPoints: 0,
+                        taskPoints: 0,
+                    };
+                }
+                const sp = appliedSP(ticket);
+                projectMap[key].points += sp;
+                expPoints += sp;
+                if (issueType === 'BUG') {
+                    projectMap[key].bugPoints += sp;
+                } else {
+                    projectMap[key].taskPoints += sp;
+                }
+                continue;
+            }
 
             const proj = ticket.project;
 
-            // ── Capitalization rule based on active accounting standard ────────
+            // ── Capitalization rule based on active accounting standard ────
             let isCapitalizableTicket = false;
 
             if (accountingStandard === 'ASU_2025_06') {
                 isCapitalizableTicket =
-                    ticket.issueType === 'STORY' &&
+                    issueType === 'STORY' &&
                     ticket.project.isCapitalizable &&
                     ticket.project.status === 'DEV' &&
                     ((proj as Record<string, unknown>).mgmtAuthorized ?? false) === true &&
@@ -112,22 +192,17 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
                     (ticket.project.status === 'DEV' || ticket.project.status === 'LIVE');
             } else {
                 // ASC 350-40 (default): STORY on a project flagged as capitalizable
-                // The isCapitalizable flag is the explicit user-set gate for capitalization.
-                // Project status (DEV/LIVE) is informational — users should toggle
-                // isCapitalizable off when a project leaves the development stage.
                 isCapitalizableTicket =
-                    ticket.issueType === 'STORY' &&
+                    issueType === 'STORY' &&
                     ticket.project.isCapitalizable;
             }
 
             if (isCapitalizableTicket) {
-                capPoints += ticket.storyPoints;
+                capPoints += appliedSP(ticket);
             } else {
-                expPoints += ticket.storyPoints;
+                expPoints += appliedSP(ticket);
             }
 
-            // Use composite key so the same project gets TWO breakdown entries:
-            // one for its capitalizable tickets (STORY) and one for its expensable tickets
             const key = `${ticket.projectId}::${isCapitalizableTicket ? 'cap' : 'exp'}`;
             if (!projectMap[key]) {
                 projectMap[key] = {
@@ -135,21 +210,32 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
                     projectName: ticket.project.name,
                     points: 0,
                     isCapitalizable: isCapitalizableTicket,
+                    bugPoints: 0,
+                    taskPoints: 0,
                 };
             }
-            projectMap[key].points += ticket.storyPoints;
+            const sp = appliedSP(ticket);
+            projectMap[key].points += sp;
+
+            // In the 'exp' bucket, split into BUG vs everything-else (TASK).
+            if (!isCapitalizableTicket) {
+                if (issueType === 'BUG') {
+                    projectMap[key].bugPoints += sp;
+                } else {
+                    projectMap[key].taskPoints += sp;
+                }
+            }
         }
 
         const capRatio = totalPoints > 0 ? capPoints / totalPoints : 0;
-        const fringeRate = dev.fringeBenefitRate || globalFringeRate;
-        const salary = payrollSalaryByDev[dev.id] ?? dev.monthlySalary;
-        const loadedCost = salary + (salary * fringeRate) + dev.stockCompAllocation;
-        const capitalizedAmount = loadedCost * capRatio;
-        const expensedAmount = loadedCost * (1 - capRatio);
+        const allocatedAmount = netCost * capRatio;
+        const expensedAmount = netCost * (1 - capRatio);
 
         const projectBreakdown = Object.values(projectMap).map((p) => ({
             ...p,
-            amount: (p.points / totalPoints) * loadedCost,
+            amount: (p.points / totalPoints) * netCost,
+            bugAmount:  (p.bugPoints  / totalPoints) * netCost,
+            taskAmount: (p.taskPoints / totalPoints) * netCost,
         }));
 
         results.push({
@@ -160,11 +246,27 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
             expPoints,
             capRatio,
             loadedCost,
-            capitalizedAmount,
+            meetingAdjustment,
+            netCost,
+            allocatedAmount,
             expensedAmount,
             projectBreakdown,
         });
     }
+
+    // ── TEMP DIAG ──
+    console.log(`[CALC DIAG] month=${month} year=${year}`);
+    console.log(`[CALC DIAG] active developers: ${developers.length}`);
+    console.log(`[CALC DIAG] payroll imports found: ${payrollImports.length}, devs with payroll: ${Object.keys(payrollSalaryByDev).length}`);
+    console.log(`[CALC DIAG] total tickets found: ${allTickets.length}`);
+    console.log(`[CALC DIAG] results count: ${results.length}`);
+    for (const r of results) {
+        console.log(`[CALC DIAG]  dev=${r.developerName} loadedCost=${r.loadedCost} capRatio=${r.capRatio.toFixed(3)} allocAmt=${r.allocatedAmount.toFixed(2)} breakdown=${r.projectBreakdown.length} projects`);
+        for (const p of r.projectBreakdown) {
+            console.log(`[CALC DIAG]    proj=${p.projectName} isCap=${p.isCapitalizable} pts=${p.points} bugPts=${p.bugPoints} taskPts=${p.taskPoints} amt=${p.amount.toFixed(2)} bugAmt=${p.bugAmount.toFixed(2)} taskAmt=${p.taskAmount.toFixed(2)}`);
+        }
+    }
+    // ── END TEMP DIAG ──
 
     return results;
 }
@@ -173,16 +275,16 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
  * Calculate amortization for a SINGLE TICKET.
  *
  * Amortization starts the month AFTER the ticket's resolutionDate.
- * Monthly charge = capitalizedAmount / amortizationMonths (straight-line).
+ * Monthly charge = allocatedAmount / amortizationMonths (straight-line).
  * Continues until net book value reaches $0.
  */
 export function calculateTicketAmortization(
-    capitalizedAmount: number,
+    allocatedAmount: number,
     amortizationMonths: number,
     resolutionDate: Date,
     asOfDate: Date,
 ): { monthlyAmortization: number; totalAmortization: number; nbv: number; monthsElapsed: number } {
-    if (capitalizedAmount <= 0 || amortizationMonths <= 0) {
+    if (allocatedAmount <= 0 || amortizationMonths <= 0) {
         return { monthlyAmortization: 0, totalAmortization: 0, nbv: 0, monthsElapsed: 0 };
     }
 
@@ -191,10 +293,10 @@ export function calculateTicketAmortization(
 
     // If we haven't reached the amort start date yet, no amortization
     if (asOfDate < amortStart) {
-        return { monthlyAmortization: 0, totalAmortization: 0, nbv: capitalizedAmount, monthsElapsed: 0 };
+        return { monthlyAmortization: 0, totalAmortization: 0, nbv: allocatedAmount, monthsElapsed: 0 };
     }
 
-    const monthlyAmortization = capitalizedAmount / amortizationMonths;
+    const monthlyAmortization = allocatedAmount / amortizationMonths;
 
     // Months elapsed since amortization started (inclusive of asOfDate's month)
     const monthsElapsed = Math.max(0,
@@ -204,7 +306,7 @@ export function calculateTicketAmortization(
 
     const cappedMonths = Math.min(monthsElapsed, amortizationMonths);
     const totalAmortization = monthlyAmortization * cappedMonths;
-    const nbv = Math.max(0, capitalizedAmount - totalAmortization);
+    const nbv = Math.max(0, allocatedAmount - totalAmortization);
 
     return { monthlyAmortization, totalAmortization, nbv, monthsElapsed: cappedMonths };
 }

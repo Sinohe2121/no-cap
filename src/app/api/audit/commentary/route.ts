@@ -93,34 +93,37 @@ export async function GET(request: Request) {
         const priorByProject: Record<string, Record<string, number>> = {};
         if (priorPeriod) {
             for (const e of priorPeriod.journalEntries) {
+                if (!e.projectId) continue;
                 if (!priorByProject[e.projectId]) priorByProject[e.projectId] = {};
                 priorByProject[e.projectId][e.entryType] = (priorByProject[e.projectId][e.entryType] || 0) + e.amount;
             }
         }
 
-        const commentary = period.journalEntries.map((entry) => {
-            const devNames = new Set(entry.auditTrails.map((t) => t.developerName));
-            const totalPoints = entry.auditTrails.reduce((s, t) => s + t.jiraTicket.storyPoints, 0);
-            const priorAmount = priorByProject[entry.projectId]?.[entry.entryType] ?? null;
+        const commentary = period.journalEntries
+            .filter(entry => entry.project !== null)  // skip project-less ADJUSTMENT entries
+            .map((entry) => {
+                const devNames = new Set(entry.auditTrails.map((t) => t.developerName));
+                const totalPoints = entry.auditTrails.reduce((s, t) => s + t.jiraTicket.storyPoints, 0);
+                const priorAmount = entry.projectId ? (priorByProject[entry.projectId]?.[entry.entryType] ?? null) : null;
 
-            return {
-                entryId: entry.id,
-                entryType: entry.entryType,
-                projectName: entry.project.name,
-                amount: entry.amount,
-                commentary: generateCommentary(
-                    entry.entryType,
-                    entry.project,
-                    entry.amount,
-                    devNames.size,
-                    totalPoints,
-                    entry.auditTrails.length,
-                    month,
-                    year,
-                    priorAmount,
-                ),
-            };
-        });
+                return {
+                    entryId: entry.id,
+                    entryType: entry.entryType,
+                    projectName: entry.project!.name,
+                    amount: entry.amount,
+                    commentary: generateCommentary(
+                        entry.entryType,
+                        entry.project!,
+                        entry.amount,
+                        devNames.size,
+                        totalPoints,
+                        entry.auditTrails.length,
+                        month,
+                        year,
+                        priorAmount,
+                    ),
+                };
+            });
 
         return NextResponse.json({ month, year, commentary });
     } catch (error) {

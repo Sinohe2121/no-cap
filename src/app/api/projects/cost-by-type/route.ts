@@ -4,10 +4,14 @@ import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
 
 /**
- * Returns monthly cost breakdown by ticket type (Story, Bug, Task, Epic, Subtask)
- * 
- * Strategy: For each ticket-month, use the CLOSEST payroll record to determine
- * each developer's loaded cost, then distribute that cost across tickets by SP ratio.
+ * Returns monthly cost breakdown by ticket type (Story, Bug, Task, Epic, Subtask).
+ * Also returns a separate `Capex` field = STORY tickets on capitalizable projects only.
+ *
+ * Formula matches the dashboard CAPEX card exactly:
+ *   ticketCost = (appliedSP / devTotalAppliedSP) × devNetCost
+ *   devNetCost = computeLoadedCost(salary, fringe, sbc) × (1 − meetingRate)
+ *
+ * Applied SP: bugs/others with 0 Jira SP use configured fallback values.
  */
 export async function GET(request: Request) {
     try {
@@ -15,9 +19,12 @@ export async function GET(request: Request) {
         const startParam = searchParams.get('start') || searchParams.get('startDate');
         const endParam = searchParams.get('end') || searchParams.get('endDate');
 
-        // ── Parallelize all independent queries ──
-        const [fringeConfig, developers, payrollImports, allTicketsRaw] = await Promise.all([
+        // ── Load configs and data in parallel ──
+        const [fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTicketsRaw, projects] = await Promise.all([
             prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
             prisma.developer.findMany({
                 where: { isActive: true },
                 select: { id: true, fringeBenefitRate: true, stockCompAllocation: true },
@@ -30,48 +37,48 @@ export async function GET(request: Request) {
                 select: {
                     assigneeId: true, storyPoints: true, projectId: true,
                     issueType: true, resolutionDate: true, createdAt: true,
-                    customFields: true,
                 },
             }),
+            prisma.project.findMany({ select: { id: true, isCapitalizable: true } }),
         ]);
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+        const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
 
-        // ── Build developer Map for O(1) lookup ──
+        // Applied SP: 0-SP bugs/tasks get a fallback so they carry their cost weight
+        const appliedSP = (t: { storyPoints: number; issueType: string }): number =>
+            t.storyPoints > 0 ? t.storyPoints
+            : t.issueType?.toUpperCase() === 'BUG' ? bugSpFallback : otherSpFallback;
+
+        // Quick lookups
         const devMap = new Map(developers.map(d => [d.id, d]));
+        const capitalizable = new Set(projects.filter(p => p.isCapitalizable).map(p => p.id));
 
-        // ── Build salary lookups ──
+        // Build monthly salary table
         const latestSalaryByDev: Record<string, number> = {};
         if (payrollImports.length > 0) {
             for (const entry of payrollImports[0].entries) {
                 latestSalaryByDev[entry.developerId] = entry.grossSalary;
             }
         }
-
         const monthlySalary: Record<string, Record<string, number>> = {};
         for (const imp of payrollImports) {
             const pd = new Date(imp.payDate);
-            const monthKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
-            if (!monthlySalary[monthKey]) monthlySalary[monthKey] = {};
+            const key = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlySalary[key]) monthlySalary[key] = {};
             for (const entry of imp.entries) {
-                monthlySalary[monthKey][entry.developerId] = entry.grossSalary;
+                monthlySalary[key][entry.developerId] = entry.grossSalary;
             }
         }
 
-        // ── Group tickets by payroll month using "open during period" logic ──
-        // For each payroll month, find tickets that were open during that month:
-        //   - Still open (no resolutionDate)
-        //   - Resolved during that month
-        const monthlyByType: Record<string, Record<string, number>> = {};
-
-        // Get unique payroll months
+        // Determine payroll months to process, optionally filtered to requested range
         const payrollMonths = new Set<string>();
         for (const imp of payrollImports) {
             const pd = new Date(imp.payDate);
             payrollMonths.add(`${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`);
         }
-
-        // Optionally filter to requested date range
         let filteredMonths = Array.from(payrollMonths).sort();
         if (startParam && endParam) {
             const rangeStart = new Date(startParam + 'T00:00:00');
@@ -84,10 +91,11 @@ export async function GET(request: Request) {
             });
         }
 
+        // ── Compute monthly cost breakdown ──
+        const monthlyByType: Record<string, Record<string, number>> = {};
+
         for (const monthKey of filteredMonths) {
-            if (!monthlyByType[monthKey]) {
-                monthlyByType[monthKey] = { Story: 0, Bug: 0, Task: 0, Epic: 0, Subtask: 0 };
-            }
+            monthlyByType[monthKey] = { Story: 0, Bug: 0, Task: 0, Epic: 0, Subtask: 0, Capex: 0 };
 
             const [y, m] = monthKey.split('-').map(Number);
             const monthStart = new Date(y, m - 1, 1);
@@ -95,47 +103,54 @@ export async function GET(request: Request) {
 
             const salaryLookup = monthlySalary[monthKey] || latestSalaryByDev;
 
-            // Find tickets "open during period" and group by developer
+            // Group tickets open during this month by developer
             const ticketsByDevInMonth: Record<string, typeof allTicketsRaw> = {};
             for (const t of allTicketsRaw) {
                 if (!t.assigneeId) continue;
-                // "Open during period": still open OR resolved during this month
                 if (t.resolutionDate) {
                     const rd = new Date(t.resolutionDate);
-                    if (rd < monthStart || rd > monthEnd) continue; // resolved outside this month
+                    if (rd < monthStart || rd > monthEnd) continue;
                 }
                 if (!ticketsByDevInMonth[t.assigneeId]) ticketsByDevInMonth[t.assigneeId] = [];
                 ticketsByDevInMonth[t.assigneeId].push(t);
             }
 
             for (const [devId, devTickets] of Object.entries(ticketsByDevInMonth)) {
-                // O(1) Map lookup instead of O(n) find
                 const dev = devMap.get(devId);
                 if (!dev) continue;
 
-                const salary = (typeof salaryLookup === 'object' && !Array.isArray(salaryLookup))
-                    ? (salaryLookup as Record<string, number>)[devId] || latestSalaryByDev[devId] || 0
-                    : 0;
+                const salary = (salaryLookup as Record<string, number>)[devId] || latestSalaryByDev[devId] || 0;
                 if (salary <= 0) continue;
 
                 const fringeRate = dev.fringeBenefitRate || globalFringeRate;
                 const sbc = dev.stockCompAllocation;
-                const totalCost = computeLoadedCost(salary, fringeRate, sbc);
-                if (totalCost <= 0) continue;
+                const grossCost = computeLoadedCost(salary, fringeRate, sbc);
+                // Apply meeting rate — matches dashboard CAPEX formula exactly
+                const netCost = grossCost * (1 - globalMeetingRate);
+                if (netCost <= 0) continue;
 
-                const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
+                // Applied SP denominator includes 0-SP bugs/tasks via fallback
+                const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
                 if (totalPoints <= 0) continue;
 
+                // Distribute cost proportionally by applied SP, tracking both type and capex bucket
                 const typePoints: Record<string, number> = {};
+                let capexPoints = 0;
                 for (const t of devTickets) {
+                    const sp = appliedSP(t);
                     const normalized = normalizeIssueType(t.issueType);
-                    typePoints[normalized] = (typePoints[normalized] || 0) + t.storyPoints;
+                    typePoints[normalized] = (typePoints[normalized] || 0) + sp;
+                    // Capex = STORY tickets on capitalizable projects (ASC 350-40)
+                    if (t.issueType?.toUpperCase() === 'STORY' && t.projectId && capitalizable.has(t.projectId)) {
+                        capexPoints += sp;
+                    }
                 }
 
                 for (const [type, points] of Object.entries(typePoints)) {
-                    const amount = (points / totalPoints) * totalCost;
+                    const amount = (points / totalPoints) * netCost;
                     monthlyByType[monthKey][type] = (monthlyByType[monthKey][type] || 0) + amount;
                 }
+                monthlyByType[monthKey].Capex += (capexPoints / totalPoints) * netCost;
             }
         }
 
@@ -147,6 +162,7 @@ export async function GET(request: Request) {
             const [yearStr, monthStr] = key.split('-');
             const monthIdx = parseInt(monthStr) - 1;
             const d = monthlyByType[key];
+            const monthHeadcount = monthlySalary[key] ? Object.keys(monthlySalary[key]).length : 0;
             return {
                 label: `${monthNames[monthIdx]} ${yearStr}`,
                 Story: Math.round((d.Story || 0) * 100) / 100,
@@ -154,6 +170,8 @@ export async function GET(request: Request) {
                 Task: Math.round((d.Task || 0) * 100) / 100,
                 Epic: Math.round((d.Epic || 0) * 100) / 100,
                 Subtask: Math.round((d.Subtask || 0) * 100) / 100,
+                Capex: Math.round((d.Capex || 0) * 100) / 100,
+                headcount: monthHeadcount,
             };
         });
 

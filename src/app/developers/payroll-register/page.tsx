@@ -114,7 +114,7 @@ export default function PayrollRegisterPage() {
     const loadData = useCallback(() => {
         setLoading(true);
         fetch('/api/payroll-register')
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : null)
             .then(setData)
             .finally(() => setLoading(false));
     }, []);

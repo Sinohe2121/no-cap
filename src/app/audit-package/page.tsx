@@ -139,7 +139,7 @@ export default function AuditPackagePage() {
     const { period: p, summary: s, entries } = data;
 
     const capEntries = entries.filter(e => e.entryType === 'CAPITALIZATION');
-    const expEntries = entries.filter(e => e.entryType === 'EXPENSE');
+    const expEntries = entries.filter(e => ['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(e.entryType));
     const amortEntries = entries.filter(e => e.entryType === 'AMORTIZATION');
 
     // Completeness score

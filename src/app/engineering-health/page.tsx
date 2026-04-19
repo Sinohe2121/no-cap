@@ -77,7 +77,7 @@ export default function EngineeringHealthPage() {
     useEffect(() => {
         setLoading(true);
         fetch(`/api/engineering-health?${apiParams}`)
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : null)
             .then(d => { setData(d); setLoading(false); })
             .catch(() => setLoading(false));
     }, [apiParams]);

@@ -11,12 +11,12 @@ export async function GET() {
         const currentYear = new Date().getFullYear();
 
         // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, developers, payrollImports, allTickets] = await Promise.all([
+        const [projects, fringeConfig, meetingConfig, developers, payrollImports, allTickets] = await Promise.all([
             prisma.project.findMany({
                 include: {
                     _count: { select: { tickets: true, journalEntries: true } },
                     tickets: {
-                        select: { storyPoints: true, issueType: true, capitalizedAmount: true },
+                        select: { storyPoints: true, issueType: true, allocatedAmount: true },
                     },
                     journalEntries: {
                         where: { entryType: 'AMORTIZATION' },
@@ -33,6 +33,7 @@ export async function GET() {
                 orderBy: { createdAt: 'desc' },
             }),
             prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
             prisma.developer.findMany({
                 where: { isActive: true },
                 select: { id: true, fringeBenefitRate: true, stockCompAllocation: true },
@@ -44,12 +45,24 @@ export async function GET() {
             prisma.jiraTicket.findMany({
                 select: {
                     assigneeId: true, storyPoints: true, projectId: true,
-                    resolutionDate: true, createdAt: true,
+                    issueType: true, resolutionDate: true, createdAt: true,
                 },
             }),
         ]);
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+
+        // Applied SP fallbacks (matches calculatePeriodCosts and dashboard)
+        const BUG_SP_FALLBACK = 1;
+        const OTHER_SP_FALLBACK = 1;
+        const appliedSP = (t: { storyPoints: number; issueType?: string | null }) =>
+            (t.storyPoints > 0) ? t.storyPoints
+            : (t.issueType?.toUpperCase() === 'BUG') ? BUG_SP_FALLBACK : OTHER_SP_FALLBACK;
+
+        // Build quick-lookup maps
+        const projectMap: Record<string, { isCapitalizable: boolean }> = {};
+        for (const p of projects) projectMap[p.id] = { isCapitalizable: p.isCapitalizable };
 
         // ── Pre-group tickets by assigneeId for O(1) lookup ──
         const ticketsByDev = new Map<string, typeof allTickets>();
@@ -61,9 +74,13 @@ export async function GET() {
         }
 
         // ── Compute per-project costs by distributing payroll ──
+        // projectCosts.itd = total cost (cap + opex) for all-time display
+        // projectCapitalized.itd = CAPEX only (STORY on capitalizable projects), matches dashboard CAPEX card
         const projectCosts: Record<string, { ytd: number; itd: number }> = {};
+        const projectCapitalized: Record<string, { ytd: number; itd: number }> = {};
         for (const p of projects) {
             projectCosts[p.id] = { ytd: 0, itd: 0 };
+            projectCapitalized[p.id] = { ytd: 0, itd: 0 };
         }
 
         for (const imp of payrollImports) {
@@ -81,35 +98,46 @@ export async function GET() {
                 const salary = salaryByDev[dev.id] || 0;
                 const fringeRate = dev.fringeBenefitRate || globalFringeRate;
                 const sbc = dev.stockCompAllocation;
-                const totalCost = computeLoadedCost(salary, fringeRate, sbc);
+                const grossCost = computeLoadedCost(salary, fringeRate, sbc);
+                // Apply meeting rate — matches dashboard CAPEX formula exactly
+                const totalCost = grossCost * (1 - globalMeetingRate);
                 if (totalCost <= 0) continue;
 
                 // "Open during period": still open OR resolved during this month
                 const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => {
-                    if (!t.resolutionDate) return true; // still open = being worked on
+                    if (!t.resolutionDate) return true;
                     const rd = new Date(t.resolutionDate);
                     return rd >= monthStart && rd <= monthEnd;
                 });
 
-                const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
+                // Apply Applied SP so developers with 0-SP tickets are included
+                const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
                 if (totalPoints <= 0) continue;
 
+                // Track total cost (all types) and capex-only (STORY on capitalizable projects)
                 const projPoints: Record<string, number> = {};
+                const storyCapPoints: Record<string, number> = {};
                 for (const t of devTickets) {
-                    if (t.projectId) {
-                        projPoints[t.projectId] = (projPoints[t.projectId] || 0) + t.storyPoints;
+                    if (!t.projectId) continue;
+                    projPoints[t.projectId] = (projPoints[t.projectId] || 0) + appliedSP(t);
+                    // CAPEX: only STORY tickets on capitalizable projects (ASC 350-40)
+                    if (t.issueType?.toUpperCase() === 'STORY' && projectMap[t.projectId]?.isCapitalizable) {
+                        storyCapPoints[t.projectId] = (storyCapPoints[t.projectId] || 0) + appliedSP(t);
                     }
                 }
 
                 for (const [projId, points] of Object.entries(projPoints)) {
                     const amount = (points / totalPoints) * totalCost;
-                    if (!projectCosts[projId]) {
-                        projectCosts[projId] = { ytd: 0, itd: 0 };
-                    }
+                    if (!projectCosts[projId]) projectCosts[projId] = { ytd: 0, itd: 0 };
                     projectCosts[projId].itd += amount;
-                    if (isCurrentYear) {
-                        projectCosts[projId].ytd += amount;
-                    }
+                    if (isCurrentYear) projectCosts[projId].ytd += amount;
+                }
+
+                for (const [projId, storyPoints] of Object.entries(storyCapPoints)) {
+                    const capAmount = (storyPoints / totalPoints) * totalCost;
+                    if (!projectCapitalized[projId]) projectCapitalized[projId] = { ytd: 0, itd: 0 };
+                    projectCapitalized[projId].itd += capAmount;
+                    if (isCurrentYear) projectCapitalized[projId].ytd += capAmount;
                 }
             }
         }
@@ -121,11 +149,15 @@ export async function GET() {
             const itdCost = costs.itd + p.startingBalance;
             const ytdCost = costs.ytd;
 
+            // allocatedAmount: computed live from payroll (STORY-only on cap projects)
+            // Uses same formula as dashboard CAPEX card for full consistency.
+            const capCosts = projectCapitalized[p.id] || { ytd: 0, itd: 0 };
+            const allocatedAmount = capCosts.itd + p.startingBalance;
+
             const storyPoints = p.tickets.reduce((s, t) => s + t.storyPoints, 0);
             const bugCount = p.tickets.filter((t) => t.issueType.toUpperCase() === 'BUG').length;
-            const capitalizedAmount = p.tickets.reduce((s, t) => s + (t.capitalizedAmount || 0), 0) + p.startingBalance;
             const depreciation = p.journalEntries.reduce((s, e) => s + e.amount, 0) + p.startingAmortization;
-            const netAssetValue = Math.max(0, capitalizedAmount - depreciation);
+            const netAssetValue = Math.max(0, allocatedAmount - depreciation);
             return {
                 id: p.id,
                 name: p.name,
@@ -133,12 +165,13 @@ export async function GET() {
                 epicKey: p.epicKey,
                 status: p.status,
                 isCapitalizable: p.isCapitalizable,
+                isQRE: (p as any).isQRE ?? false,
                 amortizationMonths: p.amortizationMonths,
                 totalCost: itdCost,
                 accumulatedCost: ytdCost,
                 ytdCost,
                 itdCost,
-                capitalizedAmount,
+                allocatedAmount,
                 depreciation,
                 netAssetValue,
                 startingBalance: p.startingBalance,
@@ -227,8 +260,8 @@ export async function PUT(request: Request) {
         const {
             id, name, description, status, isCapitalizable, overrideReason,
             startDate, startingBalance, startingAmortization, launchDate, amortizationMonths,
-            mgmtAuthorized, probableToComplete,
-        } = parsed.data;
+            mgmtAuthorized, probableToComplete, isQRE,
+        } = parsed.data as any;
 
         const updated = await prisma.project.update({
             where: { id },
@@ -245,6 +278,7 @@ export async function PUT(request: Request) {
                 ...(amortizationMonths !== undefined && { amortizationMonths }),
                 ...(mgmtAuthorized !== undefined && { mgmtAuthorized }),
                 ...(probableToComplete !== undefined && { probableToComplete }),
+                ...(isQRE !== undefined && { isQRE }),
             },
         });
 

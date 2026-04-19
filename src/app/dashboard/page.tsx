@@ -14,9 +14,12 @@ interface DashboardData {
     summary: {
         totalAssetValue: number;
         totalExpensed: number;
+        totalBugCost: number;
         ytdAmortization: number;
         activeDeveloperCount: number;
+        assignedDeveloperCount: number;
         totalProjects: number;
+        periodPayrollNet: number;
     };
     topProjects: { id: string; name: string; cost: number; status: string }[];
     chartData: { label: string; capex: number; opex: number; amortization: number }[];
@@ -73,10 +76,7 @@ export default function DashboardPage() {
         );
     }
 
-    if (!data) return null;
-
-    // Guard against API error responses (e.g. connection pool exhaustion)
-    if (!data.summary) {
+    if (!data || !data.summary) {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-[#717684]">
                 <p className="text-[14px] font-semibold">Failed to load dashboard data</p>
@@ -86,6 +86,8 @@ export default function DashboardPage() {
             </div>
         );
     }
+
+
 
     // Derived mini dataset for sparklines
     const sparklineData = (data.chartData || []).slice(-6).map((d) => ({ ...d, total: d.capex + d.opex }));
@@ -105,7 +107,10 @@ export default function DashboardPage() {
             {(() => {
                 const totalCap = data.summary.totalAssetValue;
                 const totalExp = data.summary.totalExpensed;
-                const totalSpend = totalCap + totalExp;
+                // Use the payroll-derived net total as the authoritative spend for the period
+                const totalSpend = data.summary.periodPayrollNet > 0
+                    ? data.summary.periodPayrollNet
+                    : totalCap + totalExp;
                 const capRatio = totalSpend > 0 ? Math.round((totalCap / totalSpend) * 100) : 0;
                 const nbv = totalCap - data.summary.ytdAmortization;
                 return (
@@ -144,25 +149,40 @@ export default function DashboardPage() {
                 <h2 className="text-[12px] font-extrabold text-[#717684] tracking-widest mb-4 uppercase">Performance Overview</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     
-                    {/* KPI 1 */}
+                    {/* KPI 1 — Total Spend Breakdown */}
                     <div className="fintech-card fintech-stat-block">
                         <div className="fintech-stat-label">
-                            <span>Total Capex — {shortPeriodLabel}</span>
+                            <span>Total Spend — {shortPeriodLabel}</span>
                             <Activity className="w-4 h-4 text-[#A4A9B6]" />
                         </div>
-                        <div className="fintech-stat-value">{formatCurrency(data.summary.totalAssetValue)}</div>
-                        <div className="mt-auto flex items-end gap-3 h-[40px]">
-                            <div className="text-[11px] font-bold text-[#21944E] bg-[#EBF5EF] px-2 py-0.5 rounded-md mb-1 flex-shrink-0">
-                                Target Met
-                            </div>
-                            <div className="flex-1 h-full opacity-70">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={sparklineData}>
-                                        <Line type="basis" dataKey="capex" stroke="#4141A2" strokeWidth={2} dot={false} isAnimationActive={false} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
+                        <div className="fintech-stat-value">{formatCurrency(data.summary.periodPayrollNet)}</div>
+                        {(() => {
+                            const total = data.summary.periodPayrollNet;
+                            const expensed = data.summary.totalExpensed - data.summary.totalBugCost;
+                            const bugs = data.summary.totalBugCost;
+                            const cap = data.summary.totalAssetValue;
+                            const rows = [
+                                { label: 'Expensed', value: expensed, color: '#717684' },
+                                { label: 'Bug Costs', value: bugs, color: '#FA4338' },
+                                { label: 'Capitalized', value: cap, color: '#4141A2' },
+                            ];
+                            return (
+                                <div className="mt-auto flex flex-col gap-1.5">
+                                    {rows.map(row => {
+                                        const pct = total > 0 ? Math.round((row.value / total) * 100) : 0;
+                                        return (
+                                            <div key={row.label} className="flex items-center gap-2">
+                                                <span className="text-[9px] font-bold uppercase tracking-wider w-16 flex-shrink-0" style={{ color: '#A4A9B6' }}>{row.label}</span>
+                                                <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: '#EEF0F4' }}>
+                                                    <div style={{ width: `${pct}%`, background: row.color, height: '100%', borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                                                </div>
+                                                <span className="text-[10px] font-black tabular-nums text-right" style={{ color: row.color, minWidth: 48 }}>{formatCurrency(row.value)}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* KPI 2 */}
@@ -176,11 +196,17 @@ export default function DashboardPage() {
                             <div className="text-[11px] font-bold text-[#717684] bg-[#F6F6F9] px-2 py-0.5 rounded-md mb-1 flex-shrink-0">
                                 Expensed
                             </div>
-                            <div className="flex-1 h-full flex flex-col justify-end pb-2">
+                        <div className="flex-1 h-full flex flex-col justify-end pb-2">
                                 <div className="h-1.5 w-full bg-[#F6F6F9] rounded-full overflow-hidden">
-                                    <div className="h-full bg-[#FA4338]" style={{ width: '45%' }} />
+                                    {(() => {
+                                        const total = data.summary.totalAssetValue;
+                                        const amort = data.summary.ytdAmortization;
+                                        const pct = total > 0 ? Math.min(100, Math.round((amort / total) * 100)) : 0;
+                                        return pct > 0 ? <div className="h-full bg-[#FA4338]" style={{ width: `${pct}%` }} /> : null;
+                                    })()}
                                 </div>
                             </div>
+
                         </div>
                     </div>
 
@@ -194,15 +220,22 @@ export default function DashboardPage() {
                         <div className="fintech-stat-value">{data.summary.activeDeveloperCount}</div>
                         <div className="mt-auto flex items-end gap-3 h-[40px]">
                             <div className="text-[11px] font-bold text-[#4141A2] bg-[#F0EAF8] px-2 py-0.5 rounded-md mb-1 flex-shrink-0">
-                                Billable Resource
+                                Allocated Resources
                             </div>
-                            <div className="flex-1 h-full opacity-70">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={sparklineData}>
-                                        <Bar dataKey="total" fill="#4141A2" radius={[2,2,0,0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                            {/* Stacked bar: assigned (purple) vs unassigned (gray) */}
+                            {(() => {
+                                const total = data.summary.activeDeveloperCount;
+                                const assigned = data.summary.assignedDeveloperCount;
+                                const unassigned = Math.max(0, total - assigned);
+                                const assignedPct = total > 0 ? (assigned / total) * 100 : 0;
+                                const unassignedPct = total > 0 ? (unassigned / total) * 100 : 0;
+                                return (
+                                    <div className="flex-1 h-[10px] rounded-full overflow-hidden flex mb-2" style={{ background: '#EEF0F4' }}>
+                                        <div style={{ width: `${assignedPct}%`, background: '#4141A2', borderRadius: unassignedPct === 0 ? '999px' : '999px 0 0 999px', transition: 'width 0.4s ease' }} title={`Assigned: ${assigned}`} />
+                                        <div style={{ width: `${unassignedPct}%`, background: '#C8CBF5', borderRadius: '0 999px 999px 0', transition: 'width 0.4s ease' }} title={`No tickets: ${unassigned}`} />
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                     </Link>
@@ -291,39 +324,54 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Top Capitalized Assets */}
+                {/* Capitalized Projects */}
                 <div className="fintech-card p-6 flex flex-col">
                     <div className="mb-4">
-                        <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase">Top Capitalized Assets</h2>
-                        <p className="text-[12px] text-[#A4A9B6] mt-1">Greatest accumulated value projects</p>
+                        <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase">Capitalized Projects</h2>
+                        <p className="text-[12px] text-[#A4A9B6] mt-1">Accumulated capitalized value by project</p>
                     </div>
-                    <div className="flex-1 mt-2 -ml-2">
-                        <ResponsiveContainer width="100%" height={260}>
-                            <BarChart data={data.topProjects} layout="vertical" margin={{ left: 10, right: 30, top: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#EEF0F4" />
-                                <XAxis 
-                                    type="number" 
-                                    tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }} 
-                                    tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`} 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    dx={0} 
+                    <div className="flex-1 mt-2">
+                        <ResponsiveContainer width="100%" height={Math.max(260, data.topProjects.length * 42)}>
+                            <BarChart data={data.topProjects} margin={{ left: 16, right: 16, top: 8, bottom: 60 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF0F4" />
+                                <XAxis
+                                    dataKey="name"
+                                    tick={({ x, y, payload }) => {
+                                        const words: string[] = (payload.value as string).split(' ');
+                                        const lines: string[] = [];
+                                        let line = '';
+                                        for (const word of words) {
+                                            if ((line + ' ' + word).trim().length > 14) {
+                                                if (line) lines.push(line);
+                                                line = word;
+                                            } else {
+                                                line = (line + ' ' + word).trim();
+                                            }
+                                        }
+                                        if (line) lines.push(line);
+                                        return (
+                                            <g transform={`translate(${x},${y})`}>
+                                                {lines.map((l, i) => (
+                                                    <text key={i} x={0} y={0} dy={12 + i * 12} textAnchor="middle" fill="#3F4450" fontSize={10} fontWeight={600}>{l}</text>
+                                                ))}
+                                            </g>
+                                        );
+                                    }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    interval={0}
                                 />
-                                <YAxis 
-                                    type="category" 
-                                    dataKey="name" 
-                                    tick={{ fontSize: 11, fill: '#3F4450', fontWeight: 600 }} 
-                                    axisLine={false} 
-                                    tickLine={false} 
-                                    width={140} 
+                                <YAxis
+                                    tick={{ fontSize: 10, fill: '#A4A9B6', fontWeight: 600 }}
+                                    tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`}
+                                    axisLine={false}
+                                    tickLine={false}
                                 />
                                 <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F9FAFB' }} />
-                                <Bar dataKey="cost" name="Project Value" radius={[2, 6, 6, 2]} barSize={20}>
-                                    {
-                                        data.topProjects.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={GEM_SHADES[index] || GEM_SHADES[GEM_SHADES.length - 1]} />
-                                        ))
-                                    }
+                                <Bar dataKey="cost" name="Project Value" radius={[4, 4, 0, 0]} barSize={32} maxBarSize={48}>
+                                    {data.topProjects.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={GEM_SHADES[index % GEM_SHADES.length]} />
+                                    ))}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>

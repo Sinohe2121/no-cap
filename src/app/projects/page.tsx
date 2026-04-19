@@ -91,20 +91,20 @@ export default function ProjectsDashboardPage() {
     useEffect(() => {
         // Quick metrics
         fetch(`/api/projects?${apiParams}`)
-            .then(res => res.json())
+            .then(res => res.ok ? res.json() : [])
             .then(data => setProjectCount(Array.isArray(data) ? data.length : 0))
             .catch(() => setProjectCount(0));
             
         fetch(`/api/tickets?${apiParams}`)
-            .then(res => res.json())
+            .then(res => res.ok ? res.json() : { tickets: [] })
             .then(data => setTicketCount(data.tickets ? data.tickets.length : 0))
             .catch(() => setTicketCount(0));
 
         // Deep analytics fetches
         Promise.all([
-            fetch(`/api/projects?${apiParams}`).then(res => res.json()),
-            fetch(`/api/tickets?${apiParams}`).then(res => res.json()),
-            fetch(`/api/projects/cost-by-type?${apiParams}`).then(res => res.json()),
+            fetch(`/api/projects?${apiParams}`).then(res => res.ok ? res.json() : []),
+            fetch(`/api/tickets?${apiParams}`).then(res => res.ok ? res.json() : { tickets: [] }),
+            fetch(`/api/projects/cost-by-type?${apiParams}`).then(res => res.ok ? res.json() : []),
         ]).then(([projectsRaw, ticketsRaw, costByTypeData]) => {
             const projectsArray: Project[] = Array.isArray(projectsRaw) ? projectsRaw : [];
             const ticketsArray: TicketRecord[] = ticketsRaw.tickets || [];

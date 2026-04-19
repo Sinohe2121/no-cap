@@ -48,7 +48,7 @@ export default function PeriodComparisonPage() {
         if (!periodAStart || !periodAEnd || !periodBStart || !periodBEnd) return;
         setLoading(true);
         fetch(`/api/reports/period-comparison?periodAStart=${periodAStart}&periodAEnd=${periodAEnd}&periodBStart=${periodBStart}&periodBEnd=${periodBEnd}`)
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : null)
             .then(d => { setData(d); setLoading(false); })
             .catch(() => setLoading(false));
     };

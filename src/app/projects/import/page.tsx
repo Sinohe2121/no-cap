@@ -50,7 +50,7 @@ export default function ImportPeriodPage() {
     useEffect(() => {
         setLoadingPeriods(true);
         fetch('/api/payroll-register/periods')
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : [])
             .then((data: PayrollPeriod[]) => {
                 setPayrollPeriods(Array.isArray(data) ? data : []);
             })
@@ -329,7 +329,7 @@ export default function ImportPeriodPage() {
                                         <strong>Resolved tickets:</strong> All tickets resolved between {getMonthLabel(month)} 1 and {getMonthLabel(month)} {getLastDayOfMonth(year, month)}, {year} (regardless of when created)
                                     </li>
                                     <li>
-                                        <strong>Open tickets:</strong> All tickets still open that were created during {getMonthLabel(month)} {year}, assigned to a roster developer
+                                        <strong>Open tickets:</strong> All tickets still open as of {getMonthLabel(month)} {getLastDayOfMonth(year, month)}, {year} — not resolved before {getMonthLabel(month)} 1 and not closed during the period
                                     </li>
                                     {rosterOnly && (
                                         <li>

@@ -33,7 +33,7 @@ export async function GET(
             creditAccount: entry.creditAccount,
             amount: entry.amount,
             description: entry.description,
-            project: { id: entry.project.id, name: entry.project.name, status: entry.project.status },
+            project: entry.project ? { id: entry.project.id, name: entry.project.name, status: entry.project.status } : null,
             period: { month: entry.period.month, year: entry.period.year },
             auditTrails: entry.auditTrails,
         };
@@ -41,7 +41,7 @@ export async function GET(
         // For amortization, add schedule details
         if (entry.entryType === ENTRY_TYPES.AMORTIZATION) {
             const project = entry.project;
-            if (project.launchDate) {
+            if (project && project.launchDate) {
                 const amort = calculateAmortization(
                     project.accumulatedCost,
                     project.startingBalance,
@@ -65,8 +65,8 @@ export async function GET(
             }
         }
 
-        // For capitalization or expense, get developer cost breakdown
-        if (entry.entryType === ENTRY_TYPES.CAPITALIZATION || entry.entryType === ENTRY_TYPES.EXPENSE) {
+        // For capitalization or expense entries, get developer cost breakdown
+        if ((['CAPITALIZATION', 'EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'] as string[]).includes(entry.entryType)) {
             // Summarize by developer from audit trails
             const devSummary: Record<string, { name: string; ticketCount: number; totalPoints: number; totalAmount: number }> = {};
             for (const trail of entry.auditTrails) {

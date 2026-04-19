@@ -141,14 +141,14 @@ export async function GET(request: Request) {
             const devNames = new Set(entry.auditTrails.map(t => t.developerName));
             lines.push([
                 entry.entryType,
-                esc(entry.project.name),
-                entry.project.epicKey,
-                entry.project.status,
+                esc(entry.project?.name ?? 'Period Adjustment'),
+                entry.project?.epicKey ?? '',
+                entry.project?.status ?? '',
                 entry.debitAccount,
                 entry.creditAccount,
                 money(entry.amount),
-                entry.project.mgmtAuthorized ? 'Yes' : 'No',
-                entry.project.probableToComplete ? 'Yes' : 'No',
+                entry.project ? (entry.project.mgmtAuthorized ? 'Yes' : 'No') : 'N/A',
+                entry.project ? (entry.project.probableToComplete ? 'Yes' : 'No') : 'N/A',
                 entry.auditTrails.length,
                 devNames.size,
             ].join(','));

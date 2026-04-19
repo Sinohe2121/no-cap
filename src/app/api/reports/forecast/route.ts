@@ -30,6 +30,7 @@ export async function GET() {
 
         for (const period of periods) {
             for (const entry of period.journalEntries) {
+                if (!entry.projectId || !entry.project) continue;  // skip ADJUSTMENT entries
                 if (!projectTotals[entry.projectId]) {
                     projectTotals[entry.projectId] = {
                         name: entry.project.name,
@@ -40,7 +41,7 @@ export async function GET() {
                 }
                 if (entry.entryType === 'CAPITALIZATION') {
                     projectTotals[entry.projectId].capTotal += entry.amount;
-                } else if (entry.entryType === 'EXPENSE') {
+                } else if (['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(entry.entryType)) {
                     projectTotals[entry.projectId].expTotal += entry.amount;
                 }
             }
@@ -48,7 +49,7 @@ export async function GET() {
 
         // Count unique periods per project
         for (const period of periods) {
-            const seenProjects = new Set(period.journalEntries.map((e) => e.projectId));
+            const seenProjects = new Set(period.journalEntries.filter(e => e.projectId).map((e) => e.projectId as string));
             for (const pid of Array.from(seenProjects)) {
                 if (projectTotals[pid]) {
                     projectTotals[pid].periodCount += 1;
@@ -95,7 +96,7 @@ export async function GET() {
                 .filter((e) => e.entryType === 'CAPITALIZATION')
                 .reduce((s, e) => s + e.amount, 0);
             const expense = period.journalEntries
-                .filter((e) => e.entryType === 'EXPENSE')
+                .filter((e) => ['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(e.entryType))
                 .reduce((s, e) => s + e.amount, 0);
             return {
                 month: period.month,

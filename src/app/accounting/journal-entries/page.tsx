@@ -12,6 +12,12 @@ interface Period {
     totalCapitalized: number;
     totalExpensed: number;
     totalAmortization: number;
+    // New fields from enhanced generation (only present after regeneration)
+    totalFullyLoadedPayroll?: number;
+    totalExpensedBugs?: number;
+    totalExpensedTasks?: number;
+    totalAdjustment?: number;
+    controlDelta?: number;
     journalEntries: JournalEntry[];
 }
 
@@ -22,7 +28,7 @@ interface JournalEntry {
     creditAccount: string;
     amount: number;
     description: string;
-    project: { id: string; name: string };
+    project: { id: string; name: string } | null;
 }
 
 interface DevSummary {
@@ -103,9 +109,12 @@ function formatCurrency(amount: number) {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const entryTypeConfig: Record<string, { label: string; bg: string; color: string; icon: string }> = {
-    CAPITALIZATION: { label: 'Capitalization', bg: '#EBF5EF', color: '#21944E', icon: '💰' },
-    EXPENSE: { label: 'Expense', bg: '#FFF5F5', color: '#FA4338', icon: '📝' },
-    AMORTIZATION: { label: 'Amortization', bg: '#F0EAF8', color: '#4141A2', icon: '📉' },
+    CAPITALIZATION: { label: 'Capitalization',     bg: '#EBF5EF', color: '#21944E', icon: '💰' },
+    EXPENSE:        { label: 'Expense',             bg: '#FFF5F5', color: '#FA4338', icon: '📝' },
+    EXPENSE_BUG:    { label: 'Expense — Bugs',      bg: '#FFF5F5', color: '#FA4338', icon: '🐛' },
+    EXPENSE_TASK:   { label: 'Expense — Tasks',     bg: '#FFF8EE', color: '#C86420', icon: '📋' },
+    ADJUSTMENT:     { label: 'Overhead Adj.',       bg: '#F5F3FF', color: '#4141A2', icon: '⏱' },
+    AMORTIZATION:   { label: 'Amortization',        bg: '#F0EAF8', color: '#4141A2', icon: '📉' },
 };
 
 export default function JournalEntriesPage() {
@@ -151,7 +160,7 @@ export default function JournalEntriesPage() {
 
     const loadPeriods = () => {
         fetch('/api/accounting')
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : [])
             .then(setPeriods)
             .finally(() => setLoading(false));
     };
@@ -183,7 +192,22 @@ export default function JournalEntriesPage() {
                 body: JSON.stringify({ month: genMonth, year: genYear }),
             });
             const data = await res.json();
-            setGenResult(`✓ Generated: Cap ${formatCurrency(data.totalCapitalized)} · Exp ${formatCurrency(data.totalExpensed)} · Amort ${formatCurrency(data.totalAmortization)}`);
+            const ctrl = data.controlDelta !== undefined
+                ? ` · Control Δ ${formatCurrency(data.controlDelta)}`
+                : '';
+            setGenResult(`✓ Generated: Cap ${formatCurrency(data.totalCapitalized)} · Bugs ${formatCurrency(data.totalExpensedBugs ?? 0)} · Tasks ${formatCurrency(data.totalExpensedTasks ?? 0)} · Adj ${formatCurrency(data.totalAdjustment ?? 0)} · Amort ${formatCurrency(data.totalAmortization)}${ctrl}`);
+            // Attach control data back to the period in state
+            setPeriods(prev => prev.map(p =>
+                p.month === genMonth && p.year === genYear
+                    ? { ...p,
+                        totalFullyLoadedPayroll: data.totalFullyLoadedPayroll,
+                        totalExpensedBugs: data.totalExpensedBugs,
+                        totalExpensedTasks: data.totalExpensedTasks,
+                        totalAdjustment: data.totalAdjustment,
+                        controlDelta: data.controlDelta,
+                      }
+                    : p
+            ));
             loadPeriods();
 
             // Build variance comparison for regenerations
@@ -193,7 +217,7 @@ export default function JournalEntriesPage() {
                 // Build lookup: "projectName|entryType" → amount
                 const oldMap = new Map<string, number>();
                 for (const e of oldEntries) {
-                    const key = `${e.project.name}|${e.entryType}`;
+                    const key = `${e.project?.name ?? 'Period Adjustment'}|${e.entryType}`;
                     oldMap.set(key, (oldMap.get(key) || 0) + e.amount);
                 }
 
@@ -230,7 +254,7 @@ export default function JournalEntriesPage() {
                     rows,
                     oldTotals: {
                         capitalized: sumByType(oldEntries, 'CAPITALIZATION'),
-                        expensed: sumByType(oldEntries, 'EXPENSE'),
+                        expensed: oldEntries.filter(e => ['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(e.entryType)).reduce((s, e) => s + e.amount, 0),
                         amortization: sumByType(oldEntries, 'AMORTIZATION'),
                     },
                     newTotals: {
@@ -440,6 +464,36 @@ export default function JournalEntriesPage() {
                                 </div>
                             </div>
 
+                            {/* Control tie-out banner: only shown when control data is available */}
+                            {!collapsedPeriods.has(period.id) && period.totalFullyLoadedPayroll !== undefined && (
+                                <div
+                                    className="rounded-xl p-3 mt-3 mb-1"
+                                    style={{
+                                        background: Math.abs(period.controlDelta ?? 0) < 1 ? '#EBF5EF' : '#FFF8EE',
+                                        border: `1px solid ${Math.abs(period.controlDelta ?? 0) < 1 ? 'rgba(33,148,78,0.2)' : 'rgba(200,100,32,0.25)'}`,
+                                    }}
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                                        <div className="flex items-center gap-1.5 font-semibold" style={{ color: '#3F4450' }}>
+                                            🔗 Payroll Tie-Out Control
+                                        </div>
+                                        <div className="flex flex-wrap gap-4 text-xs" style={{ color: '#717684' }}>
+                                            <span>Fully Loaded Payroll: <strong style={{ color: '#3F4450' }}>{formatCurrency(period.totalFullyLoadedPayroll ?? 0)}</strong></span>
+                                            <span>Cap: <strong style={{ color: '#21944E' }}>{formatCurrency(period.totalCapitalized)}</strong></span>
+                                            <span>Bugs: <strong style={{ color: '#FA4338' }}>{formatCurrency(period.totalExpensedBugs ?? 0)}</strong></span>
+                                            <span>Tasks: <strong style={{ color: '#C86420' }}>{formatCurrency(period.totalExpensedTasks ?? 0)}</strong></span>
+                                            <span>Overhead: <strong style={{ color: '#4141A2' }}>{formatCurrency(period.totalAdjustment ?? 0)}</strong></span>
+                                            <span style={{
+                                                fontWeight: 700,
+                                                color: Math.abs(period.controlDelta ?? 0) < 1 ? '#21944E' : '#C86420',
+                                            }}>
+                                                {Math.abs(period.controlDelta ?? 0) < 1 ? '✓' : '⚠️'} Δ {formatCurrency(period.controlDelta ?? 0)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {!collapsedPeriods.has(period.id) && period.journalEntries.length > 0 && (
                                 <div className="rounded-lg overflow-hidden mt-3" style={{ background: '#FFFFFF' }}>
                                     <table className="data-table">
@@ -466,7 +520,7 @@ export default function JournalEntriesPage() {
                                                     </td>
                                                     <td className="text-xs">{entry.debitAccount}</td>
                                                     <td className="text-xs">{entry.creditAccount}</td>
-                                                    <td className="text-xs" style={{ color: '#717684' }}>{entry.project.name}</td>
+                                                    <td className="text-xs" style={{ color: '#717684' }}>{entry.project?.name ?? <em>Period Adj.</em>}</td>
                                                     <td className="text-right font-semibold text-sm" style={{ color: '#3F4450' }}>{formatCurrency(entry.amount)}</td>
                                                     <td>
                                                         <button onClick={() => showAudit(entry.id)} className="btn-ghost text-xs">

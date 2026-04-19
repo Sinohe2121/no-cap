@@ -43,7 +43,7 @@ export interface FlowState {
         capitalizedTickets: number;
         expensedTickets: number;
         amortizingTickets: number;
-        capitalizedAmount: number;
+        allocatedAmount: number;
         expensedAmount: number;
         amortizationAmount: number;
     };
@@ -73,7 +73,7 @@ export async function GET() {
             capitalizedTickets: 0,
             expensedTickets: 0,
             amortizingTickets: 0,
-            capitalizedAmount: 0,
+            allocatedAmount: 0,
             expensedAmount: 0,
             amortizationAmount: 0,
         };
@@ -101,7 +101,7 @@ export async function GET() {
                 }),
                 prisma.jiraTicket.count({
                     where: {
-                        capitalizedAmount: { gt: 0 },
+                        allocatedAmount: { gt: 0 },
                         resolutionDate: { lt: periodStart },
                     },
                 }),
@@ -112,7 +112,7 @@ export async function GET() {
                 capitalizedTickets,
                 expensedTickets: ticketCount - capitalizedTickets,
                 amortizingTickets,
-                capitalizedAmount: latestPeriod.totalCapitalized,
+                allocatedAmount: latestPeriod.totalCapitalized,
                 expensedAmount: latestPeriod.totalExpensed,
                 amortizationAmount: latestPeriod.totalAmortization,
             };
@@ -226,7 +226,7 @@ export async function GET() {
                 phase: 'classification',
                 editable: false,
                 nextTarget: 'check_resolved',
-                stats: { ticketCount: stats.capitalizedTickets, dollarAmount: stats.capitalizedAmount },
+                stats: { ticketCount: stats.capitalizedTickets, dollarAmount: stats.allocatedAmount },
             },
             {
                 id: 'outcome_expense',

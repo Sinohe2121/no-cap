@@ -60,7 +60,7 @@ export async function GET(request: Request) {
                 entry.debitAccount,
                 fmt(entry.amount), // Debit amount
                 '', // No credit on debit line
-                entry.project.name,
+                entry.project?.name ?? 'Period Adjustment',
                 entry.description || '',
                 '', '', '', '', '', '',
                 '', '', '', '', '', '', '',
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
                 entry.creditAccount,
                 '', // No debit on credit line
                 fmt(entry.amount), // Credit amount
-                entry.project.name,
+                entry.project?.name ?? 'Period Adjustment',
                 entry.description || '',
                 '', '', '', '', '', '',
                 '', '', '', '', '', '', '',
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
                         '', // Entry type (blank — supporting detail)
                         '', // Account
                         '', '', // No debit/credit
-                        entry.project.name,
+                        entry.project?.name ?? 'Period Adjustment',
                         'Supporting Detail',
                         trail.developerName,
                         trail.ticketId,
@@ -99,7 +99,7 @@ export async function GET(request: Request) {
             }
 
             // Supporting detail: amortization schedule
-            if (entry.entryType === ENTRY_TYPES.AMORTIZATION && entry.project.launchDate) {
+            if (entry.entryType === ENTRY_TYPES.AMORTIZATION && entry.project?.launchDate) {
                 const amort = calculateAmortization(
                     entry.project.accumulatedCost,
                     entry.project.startingBalance,

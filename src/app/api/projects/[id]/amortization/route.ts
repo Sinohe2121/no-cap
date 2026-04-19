@@ -10,7 +10,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
 /**
  * GET /api/projects/[id]/amortization
  * Returns the amortization schedule aggregated from underlying ticket-level schedules.
- * Each ticket with capitalizedAmount > 0 and a resolutionDate generates its own
+ * Each ticket with allocatedAmount > 0 and a resolutionDate generates its own
  * straight-line schedule. These are summed into a unified project-level schedule.
  * Project-level overrides are applied on top.
  */
@@ -25,12 +25,12 @@ export async function GET(
                 amortOverrides: true,
                 tickets: {
                     where: {
-                        capitalizedAmount: { gt: 0 },
+                        allocatedAmount: { gt: 0 },
                         resolutionDate: { not: null },
                     },
                     select: {
                         ticketId: true,
-                        capitalizedAmount: true,
+                        allocatedAmount: true,
                         amortizationMonths: true,
                         resolutionDate: true,
                     },
@@ -44,7 +44,7 @@ export async function GET(
 
         // Filter tickets that can actually amortize
         const amortizableTickets = project.tickets.filter(
-            (t) => t.capitalizedAmount > 0 && t.resolutionDate && t.amortizationMonths > 0
+            (t) => t.allocatedAmount > 0 && t.resolutionDate && t.amortizationMonths > 0
         );
 
         // Also check project-level amortization (for legacy/manually-added projects)
@@ -63,7 +63,7 @@ export async function GET(
         let latestEnd: Date | null = null;
 
         for (const ticket of amortizableTickets) {
-            const capAmt = ticket.capitalizedAmount;
+            const capAmt = ticket.allocatedAmount;
             const months = ticket.amortizationMonths;
             const resDate = new Date(ticket.resolutionDate!);
             const amortStart = new Date(resDate.getFullYear(), resDate.getMonth() + 1, 1);

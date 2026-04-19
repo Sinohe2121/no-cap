@@ -1,0 +1,322 @@
+.backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(63, 68, 80, 0.35);
+    z-index: 200;
+    animation: fadeIn 0.18s ease;
+}
+
+.panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 480px;
+    max-width: 95vw;
+    background: #fff;
+    box-shadow: -8px 0 40px rgba(63, 68, 80, 0.14);
+    z-index: 201;
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    overflow: hidden;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #E2E4E9;
+    flex-shrink: 0;
+}
+
+.headerLeft {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ticketBadge {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #4141A2;
+    background: #EDEAF7;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.issueTypeBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.headerActions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.jiraLinkBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4141A2;
+    background: #EDEAF7;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.jiraLinkBtn:hover {
+    background: #DDD8F4;
+}
+
+.closeBtn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #A4A9B6;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.closeBtn:hover {
+    background: #F6F6F9;
+    color: #3F4450;
+}
+
+/* ── Body ───────────────────────────────────────────────────────── */
+.body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.summary {
+    font-size: 16px;
+    font-weight: 700;
+    color: #3F4450;
+    line-height: 1.45;
+    margin-bottom: 20px;
+}
+
+/* Status + priority + SP row */
+.metaRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.statusPill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.spBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4141A2;
+    background: #EDEAF7;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.priorityBadge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #F6F6F9;
+    color: #717684;
+}
+
+/* Section grid */
+.section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #F0F1F4;
+}
+
+.section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.sectionLabel {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #A4A9B6;
+    margin-bottom: 6px;
+}
+
+.sectionValue {
+    font-size: 13px;
+    color: #3F4450;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.sectionValueMuted {
+    font-size: 12px;
+    color: #A4A9B6;
+}
+
+.twoCol {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.description {
+    font-size: 13px;
+    color: #717684;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.parentLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4141A2;
+    text-decoration: none;
+}
+
+.parentLink:hover {
+    text-decoration: underline;
+}
+
+.labelChip {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    background: #F6F6F9;
+    color: #717684;
+    padding: 3px 8px;
+    border-radius: 5px;
+    margin: 2px 2px 2px 0;
+}
+
+/* ── Loading / Error states ─────────────────────────────────────── */
+.loadingState {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    padding: 48px;
+    color: #A4A9B6;
+    font-size: 13px;
+}
+
+.spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #E2E4E9;
+    border-top-color: #4141A2;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.errorState {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    padding: 48px;
+    text-align: center;
+}
+
+.errorTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #3F4450;
+}
+
+.errorMessage {
+    font-size: 12px;
+    color: #A4A9B6;
+    line-height: 1.5;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+.footer {
+    padding: 16px 24px;
+    border-top: 1px solid #E2E4E9;
+    flex-shrink: 0;
+    background: #FAFBFC;
+}
+
+.footerNote {
+    font-size: 11px;
+    color: #A4A9B6;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.footerNote a {
+    color: #4141A2;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.footerNote a:hover {
+    text-decoration: underline;
+}

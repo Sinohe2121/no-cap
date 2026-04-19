@@ -123,7 +123,7 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
 
     useEffect(() => {
         setLoading(true);
-        fetch(`/api/reports/portfolio?${apiParams}`).then((r) => r.json()).then(setData).finally(() => setLoading(false));
+        fetch(`/api/reports/portfolio?${apiParams}`).then((r) => r.ok ? r.json() : null).then(setData).finally(() => setLoading(false));
     }, [apiParams]);
 
     if (loading) return <Spinner />;
@@ -154,9 +154,9 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                         <tr>
                             <th>Asset</th>
                             <th>Phase</th>
-                            <th className="text-right">Cost Basis</th>
-                            <th className="text-right">Accum. Amort.</th>
-                            <th className="text-right">Net Book Value</th>
+                            <th style={{ textAlign: 'right' }}>Cost Basis</th>
+                            <th style={{ textAlign: 'right' }}>Accum. Amort.</th>
+                            <th style={{ textAlign: 'right' }}>Net Book Value</th>
                             <th>Progress</th>
                             <th>Remaining</th>
                             <th></th>
@@ -254,7 +254,7 @@ function AmortScheduleTab() {
     const [showAll, setShowAll] = useState(false);
 
     useEffect(() => {
-        fetch('/api/reports/amortization-schedule').then((r) => r.json()).then((d) => {
+        fetch('/api/reports/amortization-schedule').then((r) => r.ok ? r.json() : { schedules: [] }).then((d) => {
             setSchedules(d.schedules || []);
         }).finally(() => setLoading(false));
     }, []);
@@ -336,9 +336,9 @@ function AmortScheduleTab() {
                             <thead>
                                 <tr>
                                     <th>Period</th>
-                                    <th className="text-right">Amort. Expense</th>
-                                    <th className="text-right">Accum. Amort.</th>
-                                    <th className="text-right">Net Book Value</th>
+                                    <th style={{ textAlign: 'right' }}>Amort. Expense</th>
+                                    <th style={{ textAlign: 'right' }}>Accum. Amort.</th>
+                                    <th style={{ textAlign: 'right' }}>Net Book Value</th>
                                     <th>Type</th>
                                 </tr>
                             </thead>
@@ -382,7 +382,7 @@ function ForecastTab({ apiParams }: { apiParams: string }) {
 
     useEffect(() => {
         setLoading(true);
-        fetch(`/api/reports/forecast?${apiParams}`).then((r) => r.json()).then(setData).finally(() => setLoading(false));
+        fetch(`/api/reports/forecast?${apiParams}`).then((r) => r.ok ? r.json() : null).then(setData).finally(() => setLoading(false));
     }, [apiParams]);
 
     if (loading) return <Spinner />;
@@ -450,10 +450,10 @@ function ForecastTab({ apiParams }: { apiParams: string }) {
                     <thead>
                         <tr>
                             <th>Period</th>
-                            <th className="text-right">Projected Cap</th>
-                            <th className="text-right">Projected Expense</th>
-                            <th className="text-right">Total R&D</th>
-                            <th className="text-right">Cap Rate</th>
+                            <th style={{ textAlign: 'right' }}>Projected Cap</th>
+                            <th style={{ textAlign: 'right' }}>Projected Expense</th>
+                            <th style={{ textAlign: 'right' }}>Total R&D</th>
+                            <th style={{ textAlign: 'right' }}>Cap Rate</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -567,10 +567,10 @@ function BudgetTab({ apiParams }: { apiParams: string }) {
                         <tr>
                             <th>Project</th>
                             <th>Phase</th>
-                            <th className="text-right">Monthly Budget</th>
-                            <th className="text-right">YTD Budget</th>
-                            <th className="text-right">YTD Actual</th>
-                            <th className="text-right">Variance</th>
+                            <th style={{ textAlign: 'right' }}>Monthly Budget</th>
+                            <th style={{ textAlign: 'right' }}>YTD Budget</th>
+                            <th style={{ textAlign: 'right' }}>YTD Actual</th>
+                            <th style={{ textAlign: 'right' }}>Variance</th>
                             <th>Status</th>
                             <th></th>
                         </tr>

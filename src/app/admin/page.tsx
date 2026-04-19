@@ -2,26 +2,26 @@
 
 import Link from 'next/link';
 import { 
-    BookOpen, Settings, CalendarDays, ImageIcon, 
-    Users, RefreshCw, ShieldAlert, Shield, ArrowRight 
+    BookOpen, Settings, ImageIcon, 
+    Users, RefreshCw, ShieldAlert, Shield, ArrowRight, Bot
 } from 'lucide-react';
 
 const ADMIN_CARDS = [
     {
-        title: 'Accounting Standard',
-        desc: 'Controls whether the engine acts via ASC 350-40 GAAP constraints, ASU 2025-06, or IFRS.',
+        title: 'AI Configuration',
+        desc: 'Connect OpenAI, Anthropic (Claude), or Google Gemini to enable one-click LLM-powered policy memo generation.',
+        href: '/admin/llm-config',
+        icon: Bot,
+        color: '#7B61FF',
+        bg: '#F3F0FF'
+    },
+    {
+        title: 'Accounting Settings',
+        desc: 'Controls whether the engine acts via ASC 350-40 GAAP constraints, ASU 2025-06, or IFRS. Includes fiscal year boundaries and logic matrix variables.',
         href: '/admin/accounting-standard',
         icon: BookOpen,
         color: '#21944E',
         bg: '#EBF5EF'
-    },
-    {
-        title: 'Fiscal Year Settings',
-        desc: 'Define the explicit corporate fiscal boundaries for quarter-shifted YTD reporting.',
-        href: '/admin/fiscal-year',
-        icon: CalendarDays,
-        color: '#4141A2',
-        bg: '#E8F4F8'
     },
     {
         title: 'System Branding',

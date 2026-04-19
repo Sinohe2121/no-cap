@@ -52,8 +52,8 @@ export default function FinancialReportingPage() {
     const loadReport = () => {
         setLoading(true);
         Promise.all([
-            fetch(`/api/accounting/financial-report?${apiParams}`).then(r => r.json()),
-            fetch(`/api/accounting/quarterly-pl?${apiParams}`).then(r => r.json()),
+            fetch(`/api/accounting/financial-report?${apiParams}`).then(r => r.ok ? r.json() : null),
+            fetch(`/api/accounting/quarterly-pl?${apiParams}`).then(r => r.ok ? r.json() : null),
         ])
             .then(([reportData, plData]) => {
                 setReport(reportData);
@@ -64,7 +64,7 @@ export default function FinancialReportingPage() {
 
     useEffect(() => { loadReport(); }, [apiParams]);
 
-    const colCount = report?.columns.length ?? 0;
+    const colCount = report?.columns?.length ?? 0;
     const hasData = colCount > 0;
 
     return (
@@ -285,24 +285,6 @@ export default function FinancialReportingPage() {
                         );
                     })}
 
-                    {/* Legend */}
-                    <div className="glass-card p-5">
-                        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#A4A9B6' }}>How to read this report</p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs" style={{ color: '#717684' }}>
-                            <div className="rounded-xl p-3" style={{ background: '#EEF2FF' }}>
-                                <p className="font-semibold mb-1" style={{ color: '#4141A2' }}>Software Asset</p>
-                                <p>Cumulative capitalized labor cost. Increases each month new work is capitalized. A balance-sheet debit.</p>
-                            </div>
-                            <div className="rounded-xl p-3" style={{ background: '#FFF5F5' }}>
-                                <p className="font-semibold mb-1" style={{ color: '#FA4338' }}>Accumulated Amortization</p>
-                                <p>Running total of amortization recognized to date. Shown as a contra-asset (credit balance, displayed negative). Reduces Net Book Value.</p>
-                            </div>
-                            <div className="rounded-xl p-3" style={{ background: '#EBF5EF' }}>
-                                <p className="font-semibold mb-1" style={{ color: '#21944E' }}>Net Book Value</p>
-                                <p>Software Asset minus Accumulated Amortization. This is the carrying value of the asset on the balance sheet.</p>
-                            </div>
-                        </div>
-                    </div>
 
                     {/* ── Quarterly P&L Impact ── */}
                     {quarterlyPL && quarterlyPL.quarters.length > 0 && (

@@ -73,24 +73,42 @@ export async function buildCostAllocations(
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
-    const developers = await prisma.developer.findMany({
-        where: { isActive: true },
-        include: {
-            payrollEntries: {
-                where: {
-                    payrollImport: { payDate: { gte: startDate, lte: endDate } },
-                },
-                include: {
-                    payrollImport: { select: { fringeBenefitRate: true, payDate: true } },
+    // Fetch meeting rate and SP fallbacks alongside developer data
+    const [meetingConfig, bugSpConfig, otherSpConfig, developers] = await Promise.all([
+        prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
+        prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+        prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        prisma.developer.findMany({
+            where: { isActive: true },
+            include: {
+                payrollEntries: {
+                    where: {
+                        payrollImport: { payDate: { gte: startDate, lte: endDate } },
+                    },
+                    include: {
+                        payrollImport: { select: { fringeBenefitRate: true, payDate: true } },
+                    },
                 },
             },
-        },
-    });
+        }),
+    ]);
 
+    const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+    const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+    const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
+
+    /** Applied SP: Jira value if > 0, otherwise type-appropriate fallback */
+    const appliedSP = (t: { storyPoints: number; issueType: string }) =>
+        t.storyPoints > 0 ? t.storyPoints : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
+
+    // "Open during period" = still open OR resolved within this month
     const tickets = await prisma.jiraTicket.findMany({
         where: {
-            resolutionDate: { gte: startDate, lte: endDate },
             assigneeId: { in: developers.map((d) => d.id) },
+            OR: [
+                { resolutionDate: null },
+                { resolutionDate: { gte: startDate, lte: endDate } },
+            ],
         },
         include: { project: { select: { id: true, name: true } } },
     });
@@ -108,7 +126,7 @@ export async function buildCostAllocations(
 
     for (const dev of developers) {
         const devTickets = ticketsByDev.get(dev.id) ?? [];
-        const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
+        const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
         if (totalPoints === 0) continue;
 
         // Compute salary from payroll entries
@@ -118,16 +136,18 @@ export async function buildCostAllocations(
             : salary * (dev.fringeBenefitRate || globalFringeRate);
         const sbc = dev.stockCompAllocation;
         // fringe is already a dollar amount (not a rate), so loaded cost = salary + fringe + sbc
-        const totalCost = salary + fringe + sbc;
+        const loadedCost = salary + fringe + sbc;
+        // Apply meeting rate to match journal entry calculation
+        const totalCost = loadedCost * (1 - globalMeetingRate);
 
-        // Group points by project
+        // Group points by project using Applied SP
         const projectPoints: Record<string, { name: string; points: number }> = {};
         for (const t of devTickets) {
             if (!t.project) continue;
             if (!projectPoints[t.project.id]) {
                 projectPoints[t.project.id] = { name: t.project.name, points: 0 };
             }
-            projectPoints[t.project.id].points += t.storyPoints;
+            projectPoints[t.project.id].points += appliedSP(t);
         }
 
         const distributions: CostDistribution[] = Object.entries(projectPoints).map(
@@ -145,10 +165,11 @@ export async function buildCostAllocations(
             salary,
             fringe,
             sbc,
-            totalCost: totalCost,
+            totalCost,
             distributions,
         });
     }
 
     return allocations;
 }
+

@@ -22,7 +22,19 @@ export async function GET() {
                 },
             },
         });
-        return NextResponse.json(periods);
+        const periodsWithComputedTotals = periods.map(p => {
+            const totalCapitalized = p.journalEntries
+                .filter(e => e.entryType === 'CAPITALIZATION')
+                .reduce((s, e) => s + e.amount, 0);
+            const totalExpensed = p.journalEntries
+                .filter(e => ['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(e.entryType))
+                .reduce((s, e) => s + e.amount, 0);
+            const totalAmortization = p.journalEntries
+                .filter(e => e.entryType === 'AMORTIZATION')
+                .reduce((s, e) => s + e.amount, 0);
+            return { ...p, totalCapitalized, totalExpensed, totalAmortization };
+        });
+        return NextResponse.json(periodsWithComputedTotals);
     } catch (error) {
         return handleApiError(error, 'Failed to load accounting periods');
     }
@@ -92,7 +104,7 @@ export async function POST(request: Request) {
             )
         );
 
-        // ── CRITICAL: Batch reverse ticket-level capitalizedAmount from previous generation ──
+        // ── CRITICAL: Batch reverse ticket-level allocatedAmount from previous generation ──
         const existingCapEntryIds = existingEntries.map(e => e.id);
         if (existingCapEntryIds.length > 0) {
             const existingAuditTrails = await prisma.auditTrail.findMany({
@@ -106,22 +118,23 @@ export async function POST(request: Request) {
                 ticketReversal[at.jiraTicketId] = (ticketReversal[at.jiraTicketId] || 0) + at.allocatedAmount;
             }
 
-            // Batch fetch all tickets that need reversal, then batch update
+            // Batch fetch all tickets that need reversal — then run all updates in a single transaction
             const ticketIds = Object.keys(ticketReversal);
             if (ticketIds.length > 0) {
                 const tickets = await prisma.jiraTicket.findMany({
                     where: { id: { in: ticketIds } },
-                    select: { id: true, capitalizedAmount: true },
+                    select: { id: true, allocatedAmount: true },
                 });
 
-                await Promise.all(
+                // Single transaction = single DB connection, no pool exhaustion
+                await prisma.$transaction(
                     tickets.map(ticket => {
                         const reverseAmt = ticketReversal[ticket.id] || 0;
-                        const newAmount = Math.max(0, (ticket.capitalizedAmount || 0) - reverseAmt);
+                        const newAmount = Math.max(0, (ticket.allocatedAmount || 0) - reverseAmt);
                         return prisma.jiraTicket.update({
                             where: { id: ticket.id },
                             data: {
-                                capitalizedAmount: newAmount,
+                                allocatedAmount: newAmount,
                                 ...(newAmount <= 0 ? { firstCapitalizedDate: null } : {}),
                             },
                         });
@@ -137,28 +150,52 @@ export async function POST(request: Request) {
         const costResults = await calculatePeriodCosts(month, year);
 
         let totalCapitalized = 0;
-        let totalExpensed = 0;
+        let totalExpensedBugs = 0;
+        let totalExpensedTasks = 0;
+        let totalAdjustment = 0;
+        let totalFullyLoadedPayroll = 0;
 
-        // Aggregate costs by project
+        // Aggregate costs by project, split by ticket type
+        // projectCaps: capitalizable projects → CAPITALIZATION entries
+        // projectBugExps: bug costs per project → EXPENSE_BUG entries
+        // projectTaskExps: task/epic/subtask costs per project → EXPENSE_TASK entries
         const projectCaps: Record<string, number> = {};
-        const projectExps: Record<string, number> = {};
+        const projectBugExps: Record<string, number>  = {};
+        const projectTaskExps: Record<string, number> = {};
 
         for (const result of costResults) {
-            totalCapitalized += result.capitalizedAmount;
-            totalExpensed += result.expensedAmount;
+            // Guard: skip if any key value is NaN (e.g. salary lookup failed)
+            if (!isFinite(result.loadedCost) || !isFinite(result.netCost)) continue;
+
+            totalCapitalized        += result.allocatedAmount;
+            totalFullyLoadedPayroll += result.loadedCost;
+            totalAdjustment         += result.meetingAdjustment;
 
             for (const proj of result.projectBreakdown) {
-                if (proj.amount <= 0) continue;
+                if (proj.amount <= 0 || !isFinite(proj.amount)) continue;
                 if (proj.isCapitalizable) {
                     projectCaps[proj.projectId] = (projectCaps[proj.projectId] || 0) + proj.amount;
                 } else {
-                    projectExps[proj.projectId] = (projectExps[proj.projectId] || 0) + proj.amount;
+                    // Split non-cap amounts into bug vs task buckets
+                    if (proj.bugAmount > 0 && isFinite(proj.bugAmount)) {
+                        projectBugExps[proj.projectId]  = (projectBugExps[proj.projectId]  || 0) + proj.bugAmount;
+                    }
+                    if (proj.taskAmount > 0 && isFinite(proj.taskAmount)) {
+                        projectTaskExps[proj.projectId] = (projectTaskExps[proj.projectId] || 0) + proj.taskAmount;
+                    }
+                    // Stories on non-capitalizable projects fall into taskAmount already
+                    // because their isCapitalizable flag is false
                 }
             }
         }
 
-        // Batch-fetch all projects
-        const allProjectIds = Array.from(new Set([...Object.keys(projectCaps), ...Object.keys(projectExps)]));
+        // Batch-fetch all real projects (exclude the sentinel __UNALLOCATED__ key)
+        const UNALLOCATED_KEY = '__UNALLOCATED__';
+        const allProjectIds = Array.from(new Set([
+            ...Object.keys(projectCaps).filter(id => id !== UNALLOCATED_KEY),
+            ...Object.keys(projectBugExps).filter(id => id !== UNALLOCATED_KEY),
+            ...Object.keys(projectTaskExps).filter(id => id !== UNALLOCATED_KEY),
+        ]));
 
         const allProjects = await prisma.project.findMany({
             where: { id: { in: allProjectIds } },
@@ -186,8 +223,28 @@ export async function POST(request: Request) {
             ticketLookup.set(key, existing);
         }
 
+        // Load SP fallback values for Applied SP calculation
+        const [bugSpRow, otherSpRow] = await Promise.all([
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        ]);
+        const bugSpFallback   = parseFloat(bugSpRow?.value  ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpRow?.value ?? '1') || 1;
+
+        /** Applied SP for a ticket: Jira value if > 0, else type-appropriate fallback */
+        const appliedSP = (t: { storyPoints: number; issueType: string }) =>
+            t.storyPoints > 0 ? t.storyPoints
+            : t.issueType.toUpperCase() === 'BUG' ? bugSpFallback : otherSpFallback;
+
+
         // ─── STEP 2: Create capitalization entries + write to tickets ────
-        const ticketUpdates: Promise<any>[] = [];
+        // Collect ticket update data first — execute later sequentially, not in parallel
+        const ticketUpdateData: {
+            id: string;
+            allocation: number;
+            amortMonths: number;
+            firstCapDate: Date | null;
+        }[] = [];
         const projectAccIncrements: Record<string, number> = {};
 
         for (const [projectId, amount] of Object.entries(projectCaps)) {
@@ -218,12 +275,12 @@ export async function POST(request: Request) {
                 if (!proj) continue;
 
                 const tickets = ticketLookup.get(`${projectId}::${result.developerId}`) ?? [];
-                const capTickets = tickets.filter((t) => t.issueType === ISSUE_TYPES.STORY);
-                const localPoints = capTickets.reduce((s, t) => s + t.storyPoints, 0);
+                const capTickets = tickets.filter((t) => t.issueType.toUpperCase() === 'STORY');
+                const localPoints = capTickets.reduce((s, t) => s + appliedSP(t), 0);
 
                 for (const ticket of capTickets) {
                     const ticketAllocation = localPoints > 0
-                        ? proj.amount * (ticket.storyPoints / localPoints)
+                        ? proj.amount * (appliedSP(ticket) / localPoints)
                         : 0;
 
                     auditRows.push({
@@ -234,17 +291,13 @@ export async function POST(request: Request) {
                         allocatedAmount: ticketAllocation,
                     });
 
-                    // Defer ticket updates to batch
-                    ticketUpdates.push(
-                        prisma.jiraTicket.update({
-                            where: { id: ticket.id },
-                            data: {
-                                capitalizedAmount: { increment: ticketAllocation },
-                                amortizationMonths: projectAmortMap.get(projectId) ?? 36,
-                                ...(ticket.firstCapitalizedDate ? {} : { firstCapitalizedDate: startDate }),
-                            },
-                        })
-                    );
+                    // Collect update data (don't execute yet)
+                    ticketUpdateData.push({
+                        id: ticket.id,
+                        allocation: ticketAllocation,
+                        amortMonths: projectAmortMap.get(projectId) ?? 36,
+                        firstCapDate: ticket.firstCapitalizedDate ? null : startDate,
+                    });
                 }
             }
 
@@ -255,25 +308,36 @@ export async function POST(request: Request) {
             projectAccIncrements[projectId] = (projectAccIncrements[projectId] || 0) + amount;
         }
 
-        // Fire all ticket updates in parallel
-        await Promise.all(ticketUpdates);
+        // Execute ticket updates sequentially — one DB connection at a time
+        for (const upd of ticketUpdateData) {
+            await prisma.jiraTicket.update({
+                where: { id: upd.id },
+                data: {
+                    allocatedAmount: { increment: upd.allocation },
+                    amortizationMonths: upd.amortMonths,
+                    ...(upd.firstCapDate ? { firstCapitalizedDate: upd.firstCapDate } : {}),
+                },
+            });
+        }
 
-        // Batch update project accumulated costs
-        await Promise.all(
-            Object.entries(projectAccIncrements).map(([pid, amt]) =>
-                prisma.project.update({ where: { id: pid }, data: { accumulatedCost: { increment: amt } } })
-            )
-        );
+        // Execute project accumulatedCost updates sequentially
+        for (const [pid, amt] of Object.entries(projectAccIncrements)) {
+            await prisma.project.update({ where: { id: pid }, data: { accumulatedCost: { increment: amt } } });
+        }
 
-        // ─── STEP 3: Create expense entries per project ────────────────
-        for (const [projectId, amount] of Object.entries(projectExps)) {
+        // ─── STEP 3: Create expense entries per project (split by type) ────
+        // EXPENSE_BUG — bug tickets on any project
+        for (const [projectId, amount] of Object.entries(projectBugExps)) {
+            if (amount <= 0) continue;
+            if (projectId === UNALLOCATED_KEY) continue; // bugs in unallocated bucket are rare; they fold into EXPENSE_TASK
+            totalExpensedBugs += amount;
             const entry = await prisma.journalEntry.create({
                 data: {
-                    entryType: ENTRY_TYPES.EXPENSE,
+                    entryType: ENTRY_TYPES.EXPENSE_BUG,
                     debitAccount: ACCOUNTS.RD_EXPENSE_SOFTWARE,
                     creditAccount: ACCOUNTS.ACCRUED_PAYROLL,
                     amount,
-                    description: `Expense ${projectNameMap.get(projectId) ?? projectId} non-capitalizable costs`,
+                    description: `Bug/defect costs — ${projectNameMap.get(projectId) ?? projectId}`,
                     periodId: period.id,
                     projectId,
                 },
@@ -289,22 +353,24 @@ export async function POST(request: Request) {
 
             for (const result of costResults) {
                 const proj = result.projectBreakdown.find(
-                    (p) => p.projectId === projectId && !p.isCapitalizable && p.points > 0
+                    (p) => p.projectId === projectId && !p.isCapitalizable && p.bugAmount > 0
                 );
                 if (!proj) continue;
 
                 const tickets = ticketLookup.get(`${projectId}::${result.developerId}`) ?? [];
-                for (const ticket of tickets) {
-                    const isCap = ticket.issueType === ISSUE_TYPES.STORY && proj.isCapitalizable;
-                    if (!isCap) {
-                        auditRows.push({
-                            journalEntryId: entry.id,
-                            jiraTicketId: ticket.id,
-                            developerName: result.developerName,
-                            ticketId: ticket.ticketId,
-                            allocatedAmount: (ticket.storyPoints / Math.max(1, proj.points)) * (proj.points / Math.max(1, result.totalPoints)) * result.loadedCost,
-                        });
-                    }
+                const bugTickets = tickets.filter(t => t.issueType.toUpperCase() === 'BUG');
+                const bugLocalPoints = bugTickets.reduce((s, t) => s + appliedSP(t), 0);
+
+                for (const ticket of bugTickets) {
+                    auditRows.push({
+                        journalEntryId: entry.id,
+                        jiraTicketId: ticket.id,
+                        developerName: result.developerName,
+                        ticketId: ticket.ticketId,
+                        allocatedAmount: bugLocalPoints > 0
+                            ? proj.bugAmount * (appliedSP(ticket) / bugLocalPoints)
+                            : 0,
+                    });
                 }
             }
 
@@ -313,16 +379,95 @@ export async function POST(request: Request) {
             }
         }
 
+        // EXPENSE_TASK — task/epic/subtask tickets on non-capitalizable projects
+        // Also includes the __UNALLOCATED__ bucket (devs with no tickets, or tickets with no project)
+        for (const [projectId, amount] of Object.entries(projectTaskExps)) {
+            if (amount <= 0) continue;
+            const isUnallocated = projectId === UNALLOCATED_KEY;
+            const realProjectId = isUnallocated ? null : projectId;
+            totalExpensedTasks += amount;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const entry = await prisma.journalEntry.create({
+                data: {
+                    entryType: ENTRY_TYPES.EXPENSE_TASK,
+                    debitAccount: ACCOUNTS.RD_EXPENSE_SOFTWARE,
+                    creditAccount: ACCOUNTS.ACCRUED_PAYROLL,
+                    amount,
+                    description: isUnallocated
+                        ? `Unallocated labor — developers with no ticket assignments`
+                        : `Task/overhead costs — ${projectNameMap.get(projectId) ?? projectId}`,
+                    periodId: period.id,
+                    projectId: isUnallocated ? null : projectId,
+                } as any,
+            });
+
+            if (!isUnallocated) {
+                const auditRows: {
+                    journalEntryId: string;
+                    jiraTicketId: string;
+                    developerName: string;
+                    ticketId: string;
+                    allocatedAmount: number;
+                }[] = [];
+
+                for (const result of costResults) {
+                    const proj = result.projectBreakdown.find(
+                        (p) => p.projectId === projectId && !p.isCapitalizable && p.taskAmount > 0
+                    );
+                    if (!proj) continue;
+
+                    const tickets = ticketLookup.get(`${projectId}::${result.developerId}`) ?? [];
+                    const taskTickets = tickets.filter(t => t.issueType.toUpperCase() !== 'BUG');
+                    const taskLocalPoints = taskTickets.reduce((s, t) => s + appliedSP(t), 0);
+
+                    for (const ticket of taskTickets) {
+                        auditRows.push({
+                            journalEntryId: entry.id,
+                            jiraTicketId: ticket.id,
+                            developerName: result.developerName,
+                            ticketId: ticket.ticketId,
+                            allocatedAmount: taskLocalPoints > 0
+                                ? proj.taskAmount * (appliedSP(ticket) / taskLocalPoints)
+                                : 0,
+                        });
+                    }
+                }
+
+                if (auditRows.length > 0) {
+                    await prisma.auditTrail.createMany({ data: auditRows });
+                }
+            }
+        }
+
+        // ─── STEP 3b: ADJUSTMENT entry for meeting-time overhead ─────────
+        // totalAdjustment = Σ(loadedCost × meetingTimeRate) across all developers
+        // DR: Payroll Expense — Overhead / Meetings
+        // CR: Accrued Payroll / Cash
+        if (totalAdjustment > 0) {
+            await prisma.journalEntry.create({
+                data: {
+                    entryType: ENTRY_TYPES.ADJUSTMENT,
+                    debitAccount: ACCOUNTS.OVERHEAD_PAYROLL,
+                    creditAccount: ACCOUNTS.ACCRUED_PAYROLL,
+                    amount: totalAdjustment,
+                    description: `Meeting-time / overhead adjustment — ${year}-${String(month).padStart(2, '0')}`,
+                    periodId: period.id,
+                    projectId: null,
+                },
+            });
+        }
+
+
         // ─── STEP 4: Ticket-level amortization ────────────────────────
         // Find ALL tickets that:
-        //   - Have capitalized costs (capitalizedAmount > 0)
+        //   - Have capitalized costs (allocatedAmount > 0)
         //   - Were resolved BEFORE this period started (amortization has begun)
         // For each, compute the monthly amortization charge
         let totalAmortization = 0;
 
         const amortTickets = await prisma.jiraTicket.findMany({
             where: {
-                capitalizedAmount: { gt: 0 },
+                allocatedAmount: { gt: 0 },
                 resolutionDate: { lt: startDate }, // resolved before this period → amortizing
             },
             include: { project: true },
@@ -338,7 +483,7 @@ export async function POST(request: Request) {
         const asOfDate = new Date(year, month - 1, 15); // mid-month reference point
         for (const ticket of amortTickets) {
             const amort = calculateTicketAmortization(
-                ticket.capitalizedAmount,
+                ticket.allocatedAmount,
                 ticket.amortizationMonths,
                 ticket.resolutionDate!,
                 asOfDate,
@@ -430,6 +575,7 @@ export async function POST(request: Request) {
         }
 
         // Update period totals
+        const totalExpensed = totalExpensedBugs + totalExpensedTasks;
         await prisma.accountingPeriod.update({
             where: { id: period.id },
             data: { totalCapitalized, totalExpensed, totalAmortization },
@@ -442,15 +588,24 @@ export async function POST(request: Request) {
             orderBy: { entryType: 'asc' },
         });
 
+        // Control delta: fully loaded payroll − (cap + exp_bug + exp_task + adjustment)
+        // D&A excluded — it's a non-cash charge sourced from prior-period capitalizations
+        const controlDelta = totalFullyLoadedPayroll - (totalCapitalized + totalExpensedBugs + totalExpensedTasks + totalAdjustment);
+
         return NextResponse.json({
             message: 'Journal entries generated',
             totalCapitalized,
             totalExpensed,
+            totalExpensedBugs,
+            totalExpensedTasks,
+            totalAdjustment,
             totalAmortization,
+            totalFullyLoadedPayroll,
+            controlDelta,
             entries: newEntries.map(e => ({
                 entryType: e.entryType,
                 amount: e.amount,
-                projectName: e.project?.name || 'Unknown',
+                projectName: e.project?.name || (e.entryType === ENTRY_TYPES.ADJUSTMENT ? 'Period Adjustment' : 'Unknown'),
                 projectId: e.projectId,
                 description: e.description,
             })),

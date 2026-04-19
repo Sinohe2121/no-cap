@@ -1,13 +1,23 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { computeLoadedCost } from '@/lib/costUtils';
 
 export async function GET() {
     try {
-        // 1. Load system fringe rate
-        const fringeConfig = await prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } });
+        // 1. Load system configs
+        const [fringeConfig, bugSpConfig, otherSpConfig] = await Promise.all([
+            prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        ]);
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
+
+        // Applied SP: use Jira value if > 0, else use the configured fallback
+        const appliedSP = (t: { storyPoints: number; issueType: string }): number =>
+            t.storyPoints > 0 ? t.storyPoints
+                : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
 
         // 2. Load payroll imports with entries + developer info
         const payrollImports = await prisma.payrollImport.findMany({
@@ -22,9 +32,9 @@ export async function GET() {
             },
         });
 
-        // 3. Load all tickets with assignee + project
+        // 3. Load all tickets with assignee + project (include 0-SP tickets — they use fallback Applied SP)
         const allTickets = await prisma.jiraTicket.findMany({
-            where: { storyPoints: { gt: 0 } },
+            where: { assigneeId: { not: null } },
             include: {
                 assignee: { select: { id: true, name: true } },
                 project: { select: { id: true, name: true, isCapitalizable: true } },
@@ -35,13 +45,17 @@ export async function GET() {
         const periods = payrollImports.map((imp) => {
             // Active developers in this period
             const devEntries = imp.entries;
+            const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
+
             const developers = devEntries.map((entry) => {
                 const dev = entry.developer;
-                const fringeRate = dev.fringeBenefitRate || globalFringeRate;
+                // Use LOCKED rates from this payroll period — must match the payroll register exactly
+                const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
                 const salary = entry.grossSalary;
                 const fringe = salary * fringeRate;
-                const sbc = dev.stockCompAllocation || 0;
-                const loadedCost = computeLoadedCost(salary, fringeRate, sbc);
+                const sbc: number = (entry as any).sbcAmount ?? 0; // actual SBC from the imported CSV
+                const loadedCost = salary + fringe + sbc;
+                const netCost = loadedCost * (1 - meetingRate);
                 return {
                     id: dev.id,
                     name: dev.name,
@@ -49,6 +63,7 @@ export async function GET() {
                     fringe,
                     sbc,
                     loadedCost,
+                    netCost,
                 };
             }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -67,12 +82,12 @@ export async function GET() {
                 return rd >= monthStart && rd <= monthEnd;
             });
 
-            // Build developer lookup & compute total SP per developer
+            // Build developer lookup & compute total Applied SP per developer
             const devMap = new Map(developers.map((d) => [d.id, d]));
-            const devTotalSP: Record<string, number> = {};
+            const devTotalAppliedSP: Record<string, number> = {};
             for (const t of periodTickets) {
                 if (t.assigneeId && devMap.has(t.assigneeId)) {
-                    devTotalSP[t.assigneeId] = (devTotalSP[t.assigneeId] || 0) + t.storyPoints;
+                    devTotalAppliedSP[t.assigneeId] = (devTotalAppliedSP[t.assigneeId] || 0) + appliedSP(t);
                 }
             }
 
@@ -81,10 +96,11 @@ export async function GET() {
                 const allocations: Record<string, { pct: number; amount: number }> = {};
 
                 if (t.assigneeId && devMap.has(t.assigneeId)) {
-                    const totalSP = devTotalSP[t.assigneeId] || 0;
+                    const totalASP = devTotalAppliedSP[t.assigneeId] || 0;
                     const dev = devMap.get(t.assigneeId)!;
-                    const pct = totalSP > 0 ? t.storyPoints / totalSP : 0;
-                    const amount = dev.loadedCost * pct;
+                    const tASP = appliedSP(t);
+                    const pct = totalASP > 0 ? Math.min(tASP / totalASP, 1) : 0;
+                    const amount = dev.netCost * pct;
                     allocations[t.assigneeId] = { pct, amount };
                 }
 
@@ -97,6 +113,7 @@ export async function GET() {
                     assigneeName: t.assignee?.name || 'Unassigned',
                     assigneeId: t.assigneeId,
                     storyPoints: t.storyPoints,
+                    appliedSP: appliedSP(t),
                     resolutionDate: t.resolutionDate,
                     allocations,
                 };

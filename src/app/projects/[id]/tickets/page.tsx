@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Ticket, Bug, CheckSquare, ListTodo, Search, X, Calendar } from 'lucide-react';
+import { JiraTicketSlideOver } from '@/components/JiraTicketSlideOver';
 
 interface Assignee {
     id: string;
@@ -19,6 +20,7 @@ interface JiraTicket {
     issueType: string;
     summary: string;
     storyPoints: number;
+    appliedSP: number;
     resolutionDate: string | null;
     fixVersion: string | null;
     createdAt: string;
@@ -80,10 +82,11 @@ export default function ProjectTicketsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('ALL');
     const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
+    const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
 
     useEffect(() => {
         fetch(`/api/projects/${projectId}/tickets`)
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : null)
             .then(setData)
             .finally(() => setLoading(false));
     }, [projectId]);
@@ -284,7 +287,8 @@ export default function ProjectTicketsPage() {
                             <th>Type</th>
                             <th>Summary</th>
                             <th>Assignee</th>
-                            <th className="text-right">SP</th>
+                            <th className="text-right">Jira SP</th>
+                            <th className="text-right">Applied SP</th>
                             <th>Version</th>
                             <th>Resolved</th>
                         </tr>
@@ -296,9 +300,28 @@ export default function ProjectTicketsPage() {
                             return (
                                 <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)} style={{ cursor: 'pointer' }}>
                                     <td>
-                                        <span className="text-xs font-mono font-semibold" style={{ color: '#4141A2' }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedTicketKey(ticket.ticketId);
+                                            }}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                padding: 0,
+                                                cursor: 'pointer',
+                                                fontFamily: 'Menlo, Monaco, Courier New, monospace',
+                                                fontSize: 12,
+                                                fontWeight: 700,
+                                                color: '#4141A2',
+                                                textDecoration: 'underline',
+                                                textDecorationStyle: 'dotted',
+                                                textUnderlineOffset: 3,
+                                            }}
+                                            title="Preview in Jira"
+                                        >
                                             {ticket.ticketId}
-                                        </span>
+                                        </button>
                                     </td>
                                     <td>
                                         <span
@@ -321,8 +344,13 @@ export default function ProjectTicketsPage() {
                                         </div>
                                     </td>
                                     <td className="text-right">
-                                        <span className="text-sm font-semibold tabular-nums" style={{ color: '#3F4450' }}>
-                                            {ticket.storyPoints}
+                                        <span className="text-sm tabular-nums" style={{ color: '#717684' }}>
+                                            {ticket.storyPoints > 0 ? ticket.storyPoints : '—'}
+                                        </span>
+                                    </td>
+                                    <td className="text-right">
+                                        <span className="text-sm font-semibold tabular-nums" style={{ color: ticket.storyPoints > 0 ? '#3F4450' : '#4141A2' }}>
+                                            {ticket.appliedSP}
                                         </span>
                                     </td>
                                     <td>
@@ -347,6 +375,12 @@ export default function ProjectTicketsPage() {
                     </p>
                 )}
             </div>
+
+            {/* Jira ticket preview slide-over */}
+            <JiraTicketSlideOver
+                ticketKey={selectedTicketKey}
+                onClose={() => setSelectedTicketKey(null)}
+            />
         </div>
     );
 }

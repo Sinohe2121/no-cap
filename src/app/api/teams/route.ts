@@ -14,18 +14,39 @@ export async function GET(request: Request) {
         const startParam = searchParams.get('start');
         const endParam = searchParams.get('end');
 
-        // Fetch developers with tickets + auditTrails for cost
-        const developers = await prisma.developer.findMany({
-            where: { isActive: true },
-            include: {
-                tickets: {
-                    include: {
-                        project: { select: { id: true, name: true, isCapitalizable: true } },
-                        auditTrails: { select: { allocatedAmount: true } },
+        // Fetch developers + latest payroll import + SP fallback configs
+        const [developers, latestPayrollImport, bugSpConfig, otherSpConfig] = await Promise.all([
+            prisma.developer.findMany({
+                where: { isActive: true },
+                include: {
+                    tickets: {
+                        include: {
+                            project: { select: { id: true, name: true, isCapitalizable: true } },
+                            auditTrails: { select: { allocatedAmount: true } },
+                        },
                     },
                 },
-            },
-        });
+            }),
+            prisma.payrollImport.findFirst({
+                orderBy: { payDate: 'desc' },
+                include: { entries: { select: { developerId: true } } },
+            }),
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        ]);
+
+        const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
+
+        /** Applied SP: matches journal entry logic — raw SP if > 0, else type-specific fallback */
+        const appliedSP = (t: { storyPoints: number; issueType: string }): number => {
+            if (t.storyPoints > 0) return t.storyPoints;
+            return t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
+        };
+
+        // Payroll headcount = unique developers in the most recent payroll import
+        const payrollDevIds = new Set(latestPayrollImport?.entries.map(e => e.developerId) ?? []);
+        const payrollHeadcount = payrollDevIds.size; // authoritative: 49
 
         // Filter tickets by Jira Created date (not DB createdAt)
         const rangeStart = startParam ? new Date(startParam + 'T00:00:00').getTime() : null;
@@ -44,18 +65,20 @@ export async function GET(request: Request) {
         interface TeamMember {
             id: string;
             name: string;
-            totalSP: number;
+            jiraSP: number;      // raw Jira story points
+            appliedSP: number;   // with bug/task fallbacks applied
             ticketCount: number;
-            bugSP: number;
+            bugSP: number;       // applied SP for bug tickets
             allocatedCost: number;
-            capSP: number;
+            capSP: number;       // applied SP on capitalizable STORY tickets
         }
 
         interface TeamData {
             projectId: string;
             projectName: string;
             members: TeamMember[];
-            totalSP: number;
+            totalSP: number;        // raw JIRA SP
+            totalAppliedSP: number; // applied SP (used for cap ratio & cost/SP)
             totalTickets: number;
             totalCost: number;
             bugSP: number;
@@ -101,6 +124,7 @@ export async function GET(request: Request) {
                     projectName: primaryProject.name,
                     members: [],
                     totalSP: 0,
+                    totalAppliedSP: 0,
                     totalTickets: 0,
                     totalCost: 0,
                     bugSP: 0,
@@ -112,13 +136,15 @@ export async function GET(request: Request) {
                 };
             }
 
-            const devSP = periodTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
-            const devBugSP = periodTickets
+            const devJiraSP    = periodTickets.reduce((s, t) => s + (t.storyPoints || 0), 0);
+            const devAppliedSP = periodTickets.reduce((s, t) => s + appliedSP(t), 0);
+            const devBugSP     = periodTickets
                 .filter(t => t.issueType === 'Bug' || t.issueType === 'BUG')
-                .reduce((s, t) => s + (t.storyPoints || 0), 0);
+                .reduce((s, t) => s + appliedSP(t), 0);
+            // Cap SP = applied SP on capitalizable STORY tickets only
             const devCapSP = periodTickets
-                .filter(t => t.project?.isCapitalizable)
-                .reduce((s, t) => s + (t.storyPoints || 0), 0);
+                .filter(t => t.issueType === 'STORY' && t.project?.isCapitalizable)
+                .reduce((s, t) => s + appliedSP(t), 0);
             const devCost = periodTickets.reduce((s, t) => {
                 const trailCost = (t as any).auditTrails?.reduce((a: number, at: any) => a + (at.allocatedAmount || 0), 0) || 0;
                 return s + trailCost;
@@ -127,7 +153,8 @@ export async function GET(request: Request) {
             teamMap[primaryProject.id].members.push({
                 id: dev.id,
                 name: dev.name,
-                totalSP: devSP,
+                jiraSP: devJiraSP,
+                appliedSP: devAppliedSP,
                 ticketCount: periodTickets.length,
                 bugSP: devBugSP,
                 allocatedCost: Math.round(devCost),
@@ -137,27 +164,53 @@ export async function GET(request: Request) {
 
         // Aggregate team totals
         const teams: TeamData[] = Object.values(teamMap).map(team => {
-            team.totalSP = team.members.reduce((s, m) => s + m.totalSP, 0);
-            team.totalTickets = team.members.reduce((s, m) => s + m.ticketCount, 0);
-            team.totalCost = team.members.reduce((s, m) => s + m.allocatedCost, 0);
-            team.bugSP = team.members.reduce((s, m) => s + m.bugSP, 0);
-            team.capSP = team.members.reduce((s, m) => s + m.capSP, 0);
-            team.capRatio = team.totalSP > 0 ? Math.round((team.capSP / team.totalSP) * 100) : 0;
-            team.bugRatio = team.totalSP > 0 ? Math.round((team.bugSP / team.totalSP) * 100) : 0;
-            team.costPerSP = team.totalSP > 0 ? Math.round(team.totalCost / team.totalSP) : 0;
+            team.totalSP        = team.members.reduce((s, m) => s + m.jiraSP, 0);
+            team.totalAppliedSP = team.members.reduce((s, m) => s + m.appliedSP, 0);
+            team.totalTickets   = team.members.reduce((s, m) => s + m.ticketCount, 0);
+            team.totalCost      = team.members.reduce((s, m) => s + m.allocatedCost, 0);
+            team.bugSP          = team.members.reduce((s, m) => s + m.bugSP, 0);
+            team.capSP          = team.members.reduce((s, m) => s + m.capSP, 0);
+            // Cap ratio uses applied SP as denominator (matches journal entry math)
+            team.capRatio  = team.totalAppliedSP > 0 ? Math.round((team.capSP / team.totalAppliedSP) * 100) : 0;
+            team.bugRatio  = team.totalAppliedSP > 0 ? Math.round((team.bugSP  / team.totalAppliedSP) * 100) : 0;
+            team.costPerSP = team.totalAppliedSP > 0 ? Math.round(team.totalCost / team.totalAppliedSP) : 0;
 
             // Sort members by SP descending
-            team.members.sort((a, b) => b.totalSP - a.totalSP);
+            team.members.sort((a, b) => b.appliedSP - a.appliedSP);
             return team;
         });
 
         // Sort teams by total cost descending
         teams.sort((a, b) => b.totalCost - a.totalCost);
 
-        // Summary
+        // Summary — compute 3-segment developer breakdown
+        // closedTicketDevs: devs who made it into teamMap (they had tickets in the period by creation date)
+        const devsInTeams = new Set(teams.flatMap(t => t.members.map(m => m.id)));
+
+        // openTicketDevs: active devs with tickets created in period but NOT resolved (not in teamMap)
+        // We detect this by checking which active devs have tickets in the range that are unresolved
+        const openDevIds = new Set<string>();
+        for (const dev of developers) {
+            if (devsInTeams.has(dev.id)) continue; // already counted as closed
+            const hasTicketInRange = dev.tickets.some(t => {
+                if (!isInRange(t)) return false;
+                return !t.resolutionDate; // unresolved = open/in-progress
+            });
+            if (hasTicketInRange) openDevIds.add(dev.id);
+        }
+
+        const totalActive = developers.length;
+        const closedTicketDevs = devsInTeams.size;
+        const openTicketDevs = openDevIds.size;
+        const noTicketDevs = Math.max(0, payrollHeadcount - closedTicketDevs - openTicketDevs);
+
         const summary = {
             totalTeams: teams.length,
-            totalDevs: teams.reduce((s, t) => s + t.members.length, 0),
+            totalDevs: devsInTeams.size + openDevIds.size,
+            closedTicketDevs,
+            openTicketDevs,
+            noTicketDevs,
+            totalPayrollDevs: payrollHeadcount,
             totalSP: teams.reduce((s, t) => s + t.totalSP, 0),
             totalCost: Math.round(teams.reduce((s, t) => s + t.totalCost, 0)),
             avgCapRatio: teams.length > 0 ? Math.round(teams.reduce((s, t) => s + t.capRatio, 0) / teams.length) : 0,

@@ -22,7 +22,12 @@ export const authOptions: AuthOptions = {
                     where: { email: credentials.email.toLowerCase().trim() },
                 });
 
-                if (!user) return null;
+                if (!user) {
+                    // Prevent timing attack (username enumeration) by simulating work
+                    // A standard bcrypt hash used for dummy comparison
+                    await bcrypt.compare(credentials.password, '$2a$10$8K1p/a00qWKte1pi1aXGQe');
+                    return null;
+                }
 
                 const valid = await bcrypt.compare(credentials.password, user.passwordHash);
                 if (!valid) return null;

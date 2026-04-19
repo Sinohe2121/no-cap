@@ -14,11 +14,12 @@ interface Project {
     epicKey: string;
     status: string;
     isCapitalizable: boolean;
+    isQRE: boolean;
     totalCost: number;
     accumulatedCost: number;
     ytdCost: number;
     itdCost: number;
-    capitalizedAmount: number;
+    allocatedAmount: number;
     depreciation: number;
     netAssetValue: number;
     startingBalance: number;
@@ -60,7 +61,7 @@ export default function ProjectsPage() {
 
     // ── Legacy Project Modal State ──
     const [showLegacyModal, setShowLegacyModal] = useState(false);
-    const [legacyForm, setLegacyForm] = useState({ name: '', capitalizedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
+    const [legacyForm, setLegacyForm] = useState({ name: '', allocatedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
     const [legacySchedule, setLegacySchedule] = useState<{ month: number; year: number; charge: number }[]>([]);
     const [legacySaving, setLegacySaving] = useState(false);
     const [legacyError, setLegacyError] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export default function ProjectsPage() {
     const updateLegacyField = (field: string, value: string | number) => {
         const updated = { ...legacyForm, [field]: value };
         setLegacyForm(updated);
-        recalcSchedule(updated.capitalizedAmount, updated.accumulatedDepreciation, updated.asOfDate, updated.usefulLife);
+        recalcSchedule(updated.allocatedAmount, updated.accumulatedDepreciation, updated.asOfDate, updated.usefulLife);
     };
 
     const updateScheduleRow = (index: number, charge: number) => {
@@ -96,7 +97,7 @@ export default function ProjectsPage() {
     };
 
     const createLegacyProject = async () => {
-        const cap = parseFloat(legacyForm.capitalizedAmount);
+        const cap = parseFloat(legacyForm.allocatedAmount);
         const dep = parseFloat(legacyForm.accumulatedDepreciation) || 0;
         if (!legacyForm.name) { setLegacyError('Project name is required.'); return; }
         if (!cap || cap <= 0) { setLegacyError('Capitalized amount is required.'); return; }
@@ -128,7 +129,7 @@ export default function ProjectsPage() {
                 return;
             }
             setShowLegacyModal(false);
-            setLegacyForm({ name: '', capitalizedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
+            setLegacyForm({ name: '', allocatedAmount: '', asOfDate: '', accumulatedDepreciation: '', usefulLife: 36 });
             setLegacySchedule([]);
             setLinkedProjectId('');
             loadProjects();
@@ -142,12 +143,24 @@ export default function ProjectsPage() {
     const loadProjects = () => {
         setLoading(true);
         fetch('/api/projects')
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : [])
             .then(setProjects)
             .finally(() => setLoading(false));
     };
 
     useEffect(() => { loadProjects(); }, []);
+
+    const toggleQRE = async (project: Project) => {
+        const updated = !project.isQRE;
+        await fetch('/api/projects', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: project.id, isQRE: updated }),
+        });
+        setProjects((prev) =>
+            prev.map((p) => (p.id === project.id ? { ...p, isQRE: updated } : p))
+        );
+    };
 
     const toggleCapitalizable = async (project: Project) => {
         const updated = !project.isCapitalizable;
@@ -254,6 +267,7 @@ export default function ProjectsPage() {
                         <tr>
                             <th>Project</th>
                             <th>Status</th>
+                            <th>QRE</th>
                             <th>Treatment</th>
                             <th className="text-right">Capitalized</th>
                             <th className="text-right">Depreciation</th>
@@ -308,6 +322,17 @@ export default function ProjectsPage() {
                                 </td>
                                 <td>
                                     <button
+                                        onClick={() => toggleQRE(project)}
+                                        className={`toggle-switch ${project.isQRE ? 'active' : ''}`}
+                                        title={project.isQRE ? 'QRE — click to disable' : 'Not QRE — click to enable'}
+                                        style={{ '--toggle-active-bg': '#4141A2' } as React.CSSProperties}
+                                    />
+                                    <span className="text-[10px] ml-2 uppercase font-semibold" style={{ color: project.isQRE ? '#4141A2' : '#A4A9B6' }}>
+                                        {project.isQRE ? 'QRE' : 'No'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button
                                         onClick={() => toggleCapitalizable(project)}
                                         className={`toggle-switch ${project.isCapitalizable ? 'active' : ''}`}
                                         title={project.isCapitalizable ? 'Capitalize' : 'Expense'}
@@ -317,7 +342,7 @@ export default function ProjectsPage() {
                                     </span>
                                 </td>
                                 <td className="text-right">
-                                    <span className="text-sm font-semibold" style={{ color: project.capitalizedAmount > 0 ? '#4141A2' : '#3F4450' }}>{formatCurrency(project.capitalizedAmount)}</span>
+                                    <span className="text-sm font-semibold" style={{ color: project.allocatedAmount > 0 ? '#4141A2' : '#3F4450' }}>{formatCurrency(project.allocatedAmount)}</span>
                                 </td>
                                 <td className="text-right">
                                     <span className="text-sm font-semibold" style={{ color: project.depreciation > 0 ? '#FA4338' : '#A4A9B6' }}>{formatCurrency(project.depreciation)}</span>
@@ -562,8 +587,8 @@ export default function ProjectsPage() {
                                     <label className="form-label">Capitalized Amount ($) <span style={{ color: '#FA4338' }}>*</span></label>
                                     <input
                                         type="number"
-                                        value={legacyForm.capitalizedAmount}
-                                        onChange={(e) => updateLegacyField('capitalizedAmount', e.target.value)}
+                                        value={legacyForm.allocatedAmount}
+                                        onChange={(e) => updateLegacyField('allocatedAmount', e.target.value)}
                                         placeholder="250,000"
                                         className="form-input"
                                         min={0}
@@ -627,7 +652,7 @@ export default function ProjectsPage() {
                                             </thead>
                                             <tbody>
                                                 {(() => {
-                                                    const cap = parseFloat(legacyForm.capitalizedAmount) || 0;
+                                                    const cap = parseFloat(legacyForm.allocatedAmount) || 0;
                                                     const dep = parseFloat(legacyForm.accumulatedDepreciation) || 0;
                                                     let runningNbv = cap - dep;
                                                     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

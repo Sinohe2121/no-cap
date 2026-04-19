@@ -66,7 +66,8 @@ export async function GET() {
             for (const entry of period.journalEntries) {
                 const periodTotal = period.totalCapitalized + period.totalExpensed + period.totalAmortization;
 
-                // 2. Large single entry: one entry > 40% of period total
+                // Skip entries with no project (e.g. ADJUSTMENT entries)
+                if (!entry.project) continue;
                 if (periodTotal > 0 && entry.amount / periodTotal > 0.40 && entry.entryType !== 'AMORTIZATION') {
                     anomalies.push({
                         id: nextId(),
@@ -144,6 +145,7 @@ export async function GET() {
         // Group totals by projectId in-memory
         const capTotalByProject = new Map<string, number>();
         for (const entry of allCapEntries) {
+            if (!entry.projectId) continue;
             capTotalByProject.set(entry.projectId, (capTotalByProject.get(entry.projectId) ?? 0) + entry.amount);
         }
 

@@ -33,6 +33,7 @@ interface DevDetail {
         issueType: string;
         summary: string;
         storyPoints: number;
+        appliedSP: number;
         resolutionDate: string | null;
         project: { id: string; name: string; epicKey: string; status: string; isCapitalizable: boolean };
     }[];
@@ -69,7 +70,7 @@ export default function DeveloperDetailPage() {
 
     useEffect(() => {
         fetch(`/api/developers/${params.id}`)
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : null)
             .then((data) => {
                 setDev(data);
                 setForm({
@@ -136,7 +137,7 @@ export default function DeveloperDetailPage() {
         if (!projectMap[t.project.epicKey]) {
             projectMap[t.project.epicKey] = { name: t.project.name, points: 0 };
         }
-        projectMap[t.project.epicKey].points += t.storyPoints;
+        projectMap[t.project.epicKey].points += t.appliedSP;
     });
     const projectBarData = Object.values(projectMap).sort((a, b) => b.points - a.points);
 
@@ -326,10 +327,11 @@ export default function DeveloperDetailPage() {
                     <thead>
                         <tr>
                             <th>Ticket</th>
+                            <th>Project</th>
                             <th>Type</th>
                             <th>Summary</th>
-                            <th>Project</th>
-                            <th className="text-right">Points</th>
+                            <th className="text-right">JIRA SP</th>
+                            <th className="text-right">Applied SP</th>
                             <th>Resolved</th>
                         </tr>
                     </thead>
@@ -337,6 +339,7 @@ export default function DeveloperDetailPage() {
                         {dev.tickets.map((ticket) => (
                             <tr key={ticket.id}>
                                 <td><span className="text-xs font-mono" style={{ color: '#4141A2' }}>{ticket.ticketId}</span></td>
+                                <td className="text-xs" style={{ color: '#717684', whiteSpace: 'nowrap' }}>{ticket.project.name}</td>
                                 <td>
                                     <span className="badge" style={{
                                         background: ticket.issueType === 'STORY' ? '#EBF5EF' : ticket.issueType === 'BUG' ? '#FFF5F5' : '#F0EAF8',
@@ -345,10 +348,12 @@ export default function DeveloperDetailPage() {
                                         {ticket.issueType}
                                     </span>
                                 </td>
-                                <td className="text-sm max-w-[250px] truncate" style={{ color: '#3F4450' }}>{ticket.summary}</td>
-                                <td className="text-xs" style={{ color: '#717684' }}>{ticket.project.name}</td>
-                                <td className="text-right font-semibold" style={{ color: '#3F4450' }}>{ticket.storyPoints}</td>
-                                <td className="text-xs" style={{ color: '#A4A9B6' }}>{formatDate(ticket.resolutionDate)}</td>
+                                <td className="text-sm" style={{ color: '#3F4450', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.summary}</td>
+                                <td className="text-right font-semibold" style={{ color: '#717684', whiteSpace: 'nowrap' }}>{ticket.storyPoints || '—'}</td>
+                                <td className="text-right font-bold" style={{ color: ticket.appliedSP !== ticket.storyPoints ? '#4141A2' : '#3F4450', whiteSpace: 'nowrap' }}>
+                                    {ticket.appliedSP}
+                                </td>
+                                <td className="text-xs" style={{ color: '#A4A9B6', whiteSpace: 'nowrap' }}>{formatDate(ticket.resolutionDate)}</td>
                             </tr>
                         ))}
                     </tbody>

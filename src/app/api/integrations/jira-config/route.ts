@@ -25,8 +25,11 @@ const SAFE_LABEL: Record<string, string> = {
 };
 
 // GET — return current config (API token masked)
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const auth = await requireAdmin(request);
+        if (auth instanceof NextResponse) return auth;
+
         const rows = await prisma.globalConfig.findMany({
             where: { key: { in: JIRA_KEYS } },
         });
@@ -51,6 +54,9 @@ export async function GET() {
 
 // POST — save / update config fields OR test connection (?action=test)
 export async function POST(request: NextRequest) {
+    const auth = await requireAdmin(request);
+    if (auth instanceof NextResponse) return auth;
+
     const { searchParams } = new URL(request.url);
 
     // ── Connection test action ──────────────────────────────────────────────

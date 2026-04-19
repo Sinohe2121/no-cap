@@ -46,24 +46,40 @@ export async function GET(
             }),
         ]);
 
+        // Load SP fallback config
+        const [bugSpConfig, otherSpConfig] = await Promise.all([
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        ]);
+        const bugSpFallback = parseFloat(bugSpConfig?.value || '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value || '1') || 1;
+        const getAppliedSP = (t: { storyPoints: number; issueType: string }) =>
+            t.storyPoints > 0 ? t.storyPoints : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
+
+        // Map tickets to include appliedSP
+        const mappedTickets = tickets.map(t => ({ ...t, appliedSP: getAppliedSP(t) }));
+
         // Compute summary stats
         const totalSP = tickets.reduce((s, t) => s + t.storyPoints, 0);
+        const totalAppliedSP = mappedTickets.reduce((s, t) => s + t.appliedSP, 0);
         const stories = tickets.filter((t) => t.issueType === 'STORY');
         const bugs = tickets.filter((t) => t.issueType === 'BUG');
         const tasks = tickets.filter((t) => t.issueType === 'TASK');
 
         return NextResponse.json({
             project,
-            tickets,
+            tickets: mappedTickets,
             legacyChildren,
             summary: {
                 totalTickets: tickets.length,
                 totalStoryPoints: totalSP,
+                totalAppliedSP,
                 stories: stories.length,
                 bugs: bugs.length,
                 tasks: tasks.length,
             },
         });
+
     } catch (error) {
         console.error('Error fetching project tickets:', error);
         return NextResponse.json(

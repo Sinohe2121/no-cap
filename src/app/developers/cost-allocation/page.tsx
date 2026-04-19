@@ -11,6 +11,7 @@ interface DevInfo {
     fringe: number;
     sbc: number;
     loadedCost: number;
+    netCost: number;
 }
 
 interface TicketAllocation {
@@ -27,6 +28,7 @@ interface TicketRow {
     assigneeName: string;
     assigneeId: string | null;
     storyPoints: number;
+    appliedSP: number;
     resolutionDate: string | null;
     allocations: Record<string, TicketAllocation>;
 }
@@ -52,9 +54,9 @@ function formatCurrency(amount: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
-function formatPct(pct: number) {
-    if (!pct || pct === 0) return '';
-    return `${(pct * 100).toFixed(1)}%`;
+function formatCurrencyShort(amount: number) {
+    if (!amount || amount === 0) return '—';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
 function firstName(fullName: string) {
@@ -66,6 +68,38 @@ export default function CostAllocationPage() {
     const [loading, setLoading] = useState(true);
     const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
     const [assigneeFilter, setAssigneeFilter] = useState<Record<string, string | null>>({});
+
+    // Pre-compute LRM display percentages: always sum to exactly 100.0% per developer per period
+    const lrmPcts = useMemo(() => {
+        if (!data) return {} as Record<string, Record<string, Record<string, string>>>;
+        const result: Record<string, Record<string, Record<string, string>>> = {};
+        for (const period of data.periods) {
+            result[period.label] = {};
+            // Collect tickets per developer
+            const devTickets: Record<string, { id: string; pct: number }[]> = {};
+            for (const ticket of period.tickets) {
+                for (const [devId, alloc] of Object.entries(ticket.allocations)) {
+                    if (!devTickets[devId]) devTickets[devId] = [];
+                    devTickets[devId].push({ id: ticket.id, pct: alloc.pct });
+                }
+            }
+            // Apply LRM: floor all, then add 0.1% to those with largest fractional remainders
+            for (const [devId, items] of Object.entries(devTickets)) {
+                result[period.label][devId] = {};
+                const TARGET = 1000; // 100.0% in tenths
+                const floored = items.map(it => ({ ...it, fl: Math.floor(it.pct * 1000), frac: it.pct * 1000 % 1 }));
+                const sumFl = floored.reduce((s, x) => s + x.fl, 0);
+                const remainder = Math.max(0, TARGET - sumFl);
+                const sorted = [...floored].sort((a, b) => b.frac - a.frac || b.pct - a.pct);
+                const bump = new Set(sorted.slice(0, remainder).map(x => x.id));
+                for (const item of floored) {
+                    const tenths = item.fl + (bump.has(item.id) ? 1 : 0);
+                    result[period.label][devId][item.id] = tenths === 0 ? '' : `${(tenths / 10).toFixed(1)}%`;
+                }
+            }
+        }
+        return result;
+    }, [data]);
 
     const getFilteredTickets = (period: PeriodData) => {
         const filterId = assigneeFilter[period.label];
@@ -84,7 +118,7 @@ export default function CostAllocationPage() {
 
     useEffect(() => {
         fetch('/api/cost-allocation/ticket-matrix')
-            .then(res => res.json())
+            .then(res => res.ok ? res.json() : null)
             .then(setData)
             .finally(() => setLoading(false));
     }, []);
@@ -111,7 +145,7 @@ export default function CostAllocationPage() {
             <div>
                 <div className="mb-4">
                     <Link href="/developers" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline transition-all hover:-translate-x-0.5" style={{ color: '#4141A2' }}>
-                        <ArrowLeft className="w-3.5 h-3.5" /> Back to FTE & Payroll
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back to FTE &amp; Payroll
                     </Link>
                 </div>
                 <div className="glass-card p-12 text-center">
@@ -127,7 +161,7 @@ export default function CostAllocationPage() {
         <div>
             <div className="mb-4">
                 <Link href="/developers" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline transition-all hover:-translate-x-0.5" style={{ color: '#4141A2' }}>
-                    <ArrowLeft className="w-3.5 h-3.5" /> Back to FTE & Payroll
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to FTE &amp; Payroll
                 </Link>
             </div>
 
@@ -193,14 +227,17 @@ export default function CostAllocationPage() {
                             {/* Table */}
                             {!isCollapsed && (
                                 <div style={{ overflowX: 'auto', borderTop: '1px solid #E2E4E9' }}>
-                                    <table className="w-full border-collapse text-[11px]" style={{ minWidth: 600 + devs.length * 160 }}>
+                                    <table className="w-full border-collapse text-[11px]" style={{ minWidth: 660 + devs.length * 160 }}>
                                         {/* Super header: developer names spanning 2 cols each */}
                                         <thead>
                                             <tr style={{ borderBottom: '1px solid #E2E4E9' }}>
                                                 <th className="sticky left-0 z-10 px-3 py-2" style={{ background: '#FFF', minWidth: 90 }} />
                                                 <th className="px-3 py-2" style={{ minWidth: 160 }} />
                                                 <th className="px-3 py-2" style={{ minWidth: 110 }} />
+                                                {/* Jira SP column placeholder */}
                                                 <th className="px-3 py-2 text-center" style={{ minWidth: 40 }} />
+                                                {/* Applied SP column placeholder */}
+                                                <th className="px-3 py-2 text-center" style={{ minWidth: 55 }} />
                                                 {devs.map((d) => {
                                                     const isActive = activeFilter === d.id;
                                                     return (
@@ -224,7 +261,7 @@ export default function CostAllocationPage() {
                                                         >
                                                             <div>{d.name.split(',').reverse().join(' ').trim()}</div>
                                                             <div className="text-[9px] font-medium" style={{ color: isActive ? 'rgba(255,255,255,0.7)' : '#A4A9B6' }}>
-                                                                {formatCurrency(d.loadedCost)} loaded
+                                                                {formatCurrencyShort(d.netCost)} net allocated
                                                             </div>
                                                         </th>
                                                     );
@@ -238,7 +275,8 @@ export default function CostAllocationPage() {
                                                 <th className="sticky left-0 z-10 px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', background: '#FAFBFC', fontSize: 9 }}>Ticket</th>
                                                 <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Project</th>
                                                 <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Assignee</th>
-                                                <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>SP</th>
+                                                <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Jira SP</th>
+                                                <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#4141A2', fontSize: 9 }}>Applied SP</th>
                                                 {devs.map((d) => (
                                                     <th key={`${d.id}-hdr`} colSpan={2} style={{ borderLeft: '2px solid #E2E4E9' }}>
                                                         <div className="flex">
@@ -271,7 +309,14 @@ export default function CostAllocationPage() {
                                                             )}
                                                         </td>
                                                         <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#717684' }}>{ticket.assigneeName}</td>
-                                                        <td className="px-3 py-2 text-center font-semibold tabular-nums" style={{ color: '#3F4450' }}>{ticket.storyPoints}</td>
+                                                        {/* Jira SP — raw value from Jira */}
+                                                        <td className="px-3 py-2 text-center tabular-nums" style={{ color: '#717684' }}>
+                                                            {ticket.storyPoints > 0 ? ticket.storyPoints : '—'}
+                                                        </td>
+                                                        {/* Applied SP — used for cost allocation (includes BUG/OTHER fallbacks) */}
+                                                        <td className="px-3 py-2 text-center font-semibold tabular-nums" style={{ color: ticket.storyPoints > 0 ? '#3F4450' : '#4141A2' }}>
+                                                            {ticket.appliedSP != null ? ticket.appliedSP : '?'}
+                                                        </td>
                                                         {devs.map((d) => {
                                                             const alloc = ticket.allocations[d.id];
                                                             return (
@@ -279,7 +324,7 @@ export default function CostAllocationPage() {
                                                                     {alloc ? (
                                                                         <div className="flex">
                                                                             <span className="flex-1 px-2 py-2 text-center tabular-nums font-medium" style={{ color: '#4141A2' }}>
-                                                                                {formatPct(alloc.pct)}
+                                                                                {lrmPcts[period.label]?.[d.id]?.[ticket.id] || ''}
                                                                             </span>
                                                                             <span className="flex-1 px-2 py-2 text-right tabular-nums font-semibold" style={{ color: '#3F4450', borderLeft: '1px solid #F0F0F4' }}>
                                                                                 {formatCurrency(alloc.amount)}
@@ -304,7 +349,7 @@ export default function CostAllocationPage() {
                                         {/* Footer totals */}
                                         <tfoot>
                                             <tr style={{ borderTop: '2px solid #E2E4E9', background: '#FAFBFC' }}>
-                                                <td colSpan={4} className="sticky left-0 z-10 px-3 py-3 font-bold" style={{ color: '#3F4450', background: '#FAFBFC' }}>
+                                                <td colSpan={5} className="sticky left-0 z-10 px-3 py-3 font-bold" style={{ color: '#3F4450', background: '#FAFBFC' }}>
                                                     Total
                                                 </td>
                                                 {devs.map((d) => {
@@ -321,7 +366,7 @@ export default function CostAllocationPage() {
                                             </tr>
                                             {period.unallocated > 0 && (
                                                 <tr style={{ borderTop: '1px solid #E2E4E9' }}>
-                                                    <td colSpan={4 + devs.length * 2} className="px-3 py-2 text-xs italic" style={{ color: '#A4A9B6' }}>
+                                                    <td colSpan={5 + devs.length * 2} className="px-3 py-2 text-xs italic" style={{ color: '#A4A9B6' }}>
                                                         Unallocated cost (developers with no tickets this period): {formatCurrency(period.unallocated)}
                                                     </td>
                                                     <td />

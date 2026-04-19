@@ -83,20 +83,20 @@ export async function GET(request: Request) {
                 creditAccount: entry.creditAccount,
                 amount: entry.amount,
                 description: entry.description,
-                project: {
+                project: entry.project ? {
                     id: entry.project.id,
                     name: entry.project.name,
                     status: entry.project.status,
                     isCapitalizable: entry.project.isCapitalizable,
                     mgmtAuthorized: entry.project.mgmtAuthorized,
                     probableToComplete: entry.project.probableToComplete,
-                },
-                rationale: getRationale(
+                } : null,
+                rationale: entry.project ? getRationale(
                     entry.entryType,
                     entry.project.status,
                     entry.project.isCapitalizable,
                     rules,
-                ),
+                ) : 'Period-level overhead adjustment — no project association.',
                 developerSummary: Object.values(devSummary),
                 auditTrailCount: entry.auditTrails.length,
                 ticketIds: entry.auditTrails.map((t) => t.ticketId),

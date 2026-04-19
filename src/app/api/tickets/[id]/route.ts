@@ -51,9 +51,9 @@ export async function GET(
         }
 
         // ── Compute actual capitalized amount from audit trails ────────
-        // ticket.capitalizedAmount is often 0; the real cost is the sum of audit trail allocations
+        // ticket.allocatedAmount is often 0; the real cost is the sum of audit trail allocations
         const allocatedCost = ticket.auditTrails.reduce((sum, a) => sum + a.allocatedAmount, 0);
-        const capitalizedAmount = allocatedCost > 0 ? allocatedCost : ticket.capitalizedAmount;
+        const allocatedAmount = allocatedCost > 0 ? allocatedCost : ticket.allocatedAmount;
         const amortMonths = ticket.amortizationMonths || ticket.project?.amortizationMonths || 36;
         const resolutionDate = ticket.resolutionDate;
 
@@ -68,8 +68,8 @@ export async function GET(
             isCurrent: boolean;
         }[] = [];
 
-        if (resolutionDate && capitalizedAmount > 0) {
-            const monthlyAmort = capitalizedAmount / amortMonths;
+        if (resolutionDate && allocatedAmount > 0) {
+            const monthlyAmort = allocatedAmount / amortMonths;
 
             // Amortization starts the first of the month AFTER resolution
             let currentMonth = resolutionDate.getMonth() + 2; // 0-indexed → 1-indexed + next month
@@ -86,9 +86,9 @@ export async function GET(
             let cumulative = 0;
 
             for (let i = 0; i < amortMonths; i++) {
-                const monthly = Math.min(monthlyAmort, capitalizedAmount - cumulative);
+                const monthly = Math.min(monthlyAmort, allocatedAmount - cumulative);
                 cumulative += monthly;
-                const nbv = Math.max(0, capitalizedAmount - cumulative);
+                const nbv = Math.max(0, allocatedAmount - cumulative);
 
                 const isCurrent = currentMonth === nowMonth && currentYear === nowYear;
 
@@ -127,7 +127,7 @@ export async function GET(
                 resolutionDate: ticket.resolutionDate,
                 fixVersion: ticket.fixVersion,
                 importPeriod: ticket.importPeriod,
-                capitalizedAmount,
+                allocatedAmount,
                 amortizationMonths: amortMonths,
                 firstCapitalizedDate: ticket.firstCapitalizedDate,
                 monthsCapitalized: ticket.firstCapitalizedDate

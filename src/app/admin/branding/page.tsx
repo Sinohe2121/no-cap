@@ -12,7 +12,7 @@ export default function BrandingPage() {
 
     useEffect(() => {
         fetch('/api/admin')
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : { configs: [] })
             .then((data) => {
                 const logo = data.configs.find((c: any) => c.key === 'COMPANY_LOGO');
                 if (logo) setLogoVal(logo.value);

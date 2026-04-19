@@ -65,11 +65,11 @@ export async function GET(request: Request) {
         }
 
         const developers: DevRow[] = costResults.map((r) => {
-            const total = r.capitalizedAmount + r.expensedAmount;
+            const total = r.allocatedAmount + r.expensedAmount;
             const totalPayroll = r.loadedCost; // fully-loaded monthly cost
             return {
                 name: r.developerName,
-                capitalized: r.capitalizedAmount,
+                capitalized: r.allocatedAmount,
                 expensed: r.expensedAmount,
                 total,
                 totalPayroll,

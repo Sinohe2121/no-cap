@@ -43,6 +43,7 @@ model PayrollImport {
   payDate          DateTime             // the actual pay date
   year             Int
   fringeBenefitRate Float   @default(0.25)  // locked at import time from GlobalConfig
+  meetingTimeRate   Float   @default(0)     // % of loaded cost disqualified as meeting time
   createdAt        DateTime @default(now())
 
   entries   PayrollEntry[]
@@ -76,6 +77,7 @@ model Project {
   epicKey               String         @unique    // maps to Jira Epic key
   status                String         @default("PLANNING") // PLANNING | DEV | LIVE | RETIRED
   isCapitalizable       Boolean        @default(true)
+  isQRE                 Boolean        @default(false)  // Qualifies as R&D (IRC §41)
   amortizationMonths    Int            @default(36)
   accumulatedCost       Float          @default(0)
   startingBalance       Float          @default(0) // legacy pre-app cost
@@ -107,11 +109,12 @@ model JiraTicket {
   issueType       String                    // STORY | BUG | TASK
   summary         String
   storyPoints     Float     @default(0)
+  isQRE           Boolean?            // null = inherit from project; true/false = override
   resolutionDate  DateTime?
   fixVersion      String?
   customFields    Json?     // stores dynamic extra columns requested by the user
   importPeriod    String?   // e.g. "February 2026" — the accounting period this ticket was imported for
-  capitalizedAmount   Float     @default(0)  // total $ capitalized on this ticket (accumulates across periods while open)
+  allocatedAmount   Float     @default(0)  // developer cost allocated to this ticket via applied-SP distribution (capex vs opex determined by journal entry rules)
   amortizationMonths  Int       @default(36) // useful life inherited from project at cap time
   firstCapitalizedDate DateTime? // when this ticket first started accumulating capitalized cost
   createdAt       DateTime  @default(now())
@@ -129,7 +132,7 @@ model JiraTicket {
   @@index([epicKey])
   @@index([resolutionDate])
   @@index([issueType])
-  @@index([capitalizedAmount])
+  @@index([allocatedAmount])
 }
 
 // ─── Accounting Periods ─────────────────────────────────────────
@@ -152,7 +155,7 @@ model AccountingPeriod {
 // ─── Journal Entries ────────────────────────────────────────────
 model JournalEntry {
   id            String   @id @default(cuid())
-  entryType     String   // CAPITALIZATION | AMORTIZATION | EXPENSE
+  entryType     String   // CAPITALIZATION | AMORTIZATION | EXPENSE | EXPENSE_BUG | EXPENSE_TASK | ADJUSTMENT
   debitAccount  String
   creditAccount String
   amount        Float
@@ -162,8 +165,8 @@ model JournalEntry {
   periodId      String
   period        AccountingPeriod @relation(fields: [periodId], references: [id])
 
-  projectId     String
-  project       Project  @relation(fields: [projectId], references: [id])
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id])
 
   auditTrails   AuditTrail[]
 
@@ -196,6 +199,36 @@ model GlobalConfig {
   key   String @unique
   value String
   label String // human-readable label
+}
+
+// ─── R&D Tax Credit — Contract Research (IRC §41) ─────────────────
+model ContractResearch {
+  id          String   @id @default(cuid())
+  vendor      String
+  description String?
+  amount      Float
+  qrePct      Float    @default(0.65)  // IRS: 65% of contract research qualifies as QRE
+  period      String   // "January 2026" — links to payroll period
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([year])
+}
+
+// ─── Policy Memos (Rich-text documents with live data embeds) ────
+model PolicyMemo {
+  id        String   @id @default(cuid())
+  title     String
+  category  String   @default("CAPITALIZATION")
+  // CAPITALIZATION | RD_METHODOLOGY | ACCOUNTING_POLICY | CUSTOM
+  year      Int
+  content   Json     // TipTap JSON document
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([year])
+  @@index([category])
 }
 
 // ─── GitHub Integration ─────────────────────────────────────────
@@ -314,4 +347,14 @@ model AmortizationOverride {
 
   @@unique([projectId, month, year])
   @@index([projectId])
+}
+
+// ─── LLM Configuration (singleton — one row, upserted) ───────────
+model LlmConfig {
+  id                 String   @id @default("singleton")
+  provider           String   // "openai" | "anthropic" | "gemini"
+  apiKey             String   // stored in DB, admin-only readable
+  model              String?  // e.g. "gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"
+  customSystemPrompt String?  // Admin-edited system instructions; null = use default
+  updatedAt          DateTime @updatedAt
 }

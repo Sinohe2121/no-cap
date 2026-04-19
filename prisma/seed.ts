@@ -34,6 +34,8 @@ async function main() {
         { key: 'DEFAULT_AMORTIZATION_LIFE', value: '36',         label: 'Default Amortization Life (months)' },
         { key: 'CAPITALIZATION_THRESHOLD',  value: '0',          label: 'Capitalization Threshold Override ($)' },
         { key: 'ACCOUNTING_STANDARD',       value: 'ASC_350_40', label: 'Active Accounting Standard' },
+        { key: 'BUG_SP_FALLBACK',           value: '1',          label: 'Bug Story Point (Fallback)' },
+        { key: 'OTHER_SP_FALLBACK',         value: '1',          label: 'Other Task Story Point (Fallback)' },
     ];
     for (const c of configs) {
         await prisma.globalConfig.create({ data: c });

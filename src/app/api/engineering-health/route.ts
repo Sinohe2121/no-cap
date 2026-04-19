@@ -13,9 +13,18 @@ export async function GET(request: NextRequest) {
         const periodEnd = endParam ? new Date(endParam + 'T23:59:59') : now;
         const periodStart = startParam ? new Date(startParam + 'T00:00:00') : new Date(now.getFullYear(), 0, 1);
 
-        // ── Fringe config ──
         const fringeConfig = await prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } });
+        const meetingConfig = await prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } });
+        const bugSpConfig = await prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } });
+        const otherSpConfig = await prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } });
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+        const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
+        // Applied SP: use configured fallback for 0-SP tickets so bugs/tasks carry their cost weight
+        const appliedSP = (t: { storyPoints: number; issueType: string }): number =>
+            t.storyPoints > 0 ? t.storyPoints
+            : t.issueType?.toUpperCase() === 'BUG' ? bugSpFallback : otherSpFallback;
 
         // ── Load all tickets with assignee + project info ──
         const tickets = await prisma.jiraTicket.findMany({
@@ -27,6 +36,7 @@ export async function GET(request: NextRequest) {
                 ticketId: true,
                 issueType: true,
                 storyPoints: true,
+                allocatedAmount: true,
                 summary: true,
                 createdAt: true,
                 resolutionDate: true,
@@ -50,14 +60,25 @@ export async function GET(request: NextRequest) {
             include: { entries: { select: { developerId: true, grossSalary: true } } },
         });
 
-        // ── Build per-developer period cost ──
+        // Fetch the most recent payroll import (across ALL time) for headcount
+        const latestPayrollImport = await prisma.payrollImport.findFirst({
+            orderBy: { payDate: 'desc' },
+            include: { entries: { select: { developerId: true } } },
+        });
+        const activeDevelopers = latestPayrollImport
+            ? new Set(latestPayrollImport.entries.map(e => e.developerId)).size
+            : 0;
+
+
         const devPeriodCost: Record<string, number> = {};
         for (const imp of payrollImports) {
             for (const entry of imp.entries) {
                 const dev = developers.find(d => d.id === entry.developerId);
                 if (!dev) continue;
-                const loaded = computeLoadedCost(entry.grossSalary, dev.fringeBenefitRate || globalFringeRate, dev.stockCompAllocation);
-                devPeriodCost[entry.developerId] = (devPeriodCost[entry.developerId] || 0) + loaded;
+                const gross = computeLoadedCost(entry.grossSalary, dev.fringeBenefitRate || globalFringeRate, dev.stockCompAllocation);
+                // Apply meeting rate — matches dashboard formula
+                const net = gross * (1 - globalMeetingRate);
+                devPeriodCost[entry.developerId] = (devPeriodCost[entry.developerId] || 0) + net;
             }
         }
 
@@ -131,14 +152,18 @@ export async function GET(request: NextRequest) {
 
         for (const dev of heatmapDevs) {
             const devTickets = tickets.filter(t => t.assigneeId === dev.id);
-            const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
-            const bugPoints = devTickets.filter(t => t.issueType === ISSUE_TYPES.BUG).reduce((s, t) => s + t.storyPoints, 0);
-            const capPoints = devTickets.filter(t => t.project?.isCapitalizable).reduce((s, t) => s + t.storyPoints, 0);
+            // Use appliedSP so 0-SP bugs carry their weight in percentages and ratios
+            const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
+            const bugPoints = devTickets.filter(t => t.issueType === ISSUE_TYPES.BUG).reduce((s, t) => s + appliedSP(t), 0);
+            // Cap = STORY tickets on capitalizable projects only (ASC 350-40)
+            const capPoints = devTickets
+                .filter(t => t.issueType === ISSUE_TYPES.STORY && t.project?.isCapitalizable)
+                .reduce((s, t) => s + appliedSP(t), 0);
 
             const projectBreakdown: Record<string, number> = {};
             for (const t of devTickets) {
                 if (t.projectId) {
-                    projectBreakdown[t.projectId] = (projectBreakdown[t.projectId] || 0) + t.storyPoints;
+                    projectBreakdown[t.projectId] = (projectBreakdown[t.projectId] || 0) + appliedSP(t);
                 }
             }
 
@@ -162,43 +187,48 @@ export async function GET(request: NextRequest) {
         }
 
         // ── 4. Top 10 most expensive tickets ──
-        // Estimate ticket cost = (dev loaded cost / dev total SP) * ticket SP
-        const devTotalPoints: Record<string, number> = {};
-        for (const t of tickets) {
-            if (t.assigneeId) {
-                devTotalPoints[t.assigneeId] = (devTotalPoints[t.assigneeId] || 0) + t.storyPoints;
-            }
-        }
-
+        // Source: allocatedAmount field on JiraTicket (populated by ticketCostPersist using applied SP).
+        // This is the canonical cost allocation table driven by applied SP, not raw Jira SP.
         const ticketsWithCost = tickets
-            .filter(t => t.assigneeId && t.storyPoints > 0 && devPeriodCost[t.assigneeId] && devTotalPoints[t.assigneeId])
-            .map(t => {
-                const costPerPoint = devPeriodCost[t.assigneeId!] / devTotalPoints[t.assigneeId!];
-                return {
-                    ticketId: t.ticketId,
-                    summary: t.summary,
-                    issueType: t.issueType,
-                    storyPoints: t.storyPoints,
-                    developer: t.assignee?.name || 'Unknown',
-                    project: t.project?.name || 'Unlinked',
-                    estimatedCost: Math.round(costPerPoint * t.storyPoints),
-                    isCapitalizable: t.project?.isCapitalizable || false,
-                };
-            })
+            .filter(t => t.allocatedAmount && t.allocatedAmount > 0)
+            .map(t => ({
+                ticketId: t.ticketId,
+                summary: t.summary,
+                issueType: t.issueType,
+                storyPoints: t.storyPoints,
+                developer: t.assignee?.name || 'Unknown',
+                project: t.project?.name || 'Unlinked',
+                estimatedCost: Math.round(t.allocatedAmount || 0),
+                isCapitalizable: t.project?.isCapitalizable || false,
+            }))
             .sort((a, b) => b.estimatedCost - a.estimatedCost)
             .slice(0, 10);
 
         // ── 5. Summary KPIs ──
+        // Use allocatedAmount (from cost allocation table) as the canonical cost basis for all ratios.
+        // allocatedAmount is pre-computed by ticketCostPersist using applied SP weights.
         const periodTickets = tickets.filter(t => {
             const d = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
             return d >= periodStart && d <= periodEnd;
         });
         const totalSP = periodTickets.reduce((s, t) => s + t.storyPoints, 0);
-        const bugSP = periodTickets.filter(t => t.issueType === ISSUE_TYPES.BUG).reduce((s, t) => s + t.storyPoints, 0);
-        const featureSP = periodTickets.filter(t => t.issueType === ISSUE_TYPES.STORY).reduce((s, t) => s + t.storyPoints, 0);
-        const capSP = periodTickets.filter(t => t.project?.isCapitalizable).reduce((s, t) => s + t.storyPoints, 0);
+        const bugSP = periodTickets.filter(t => t.issueType === ISSUE_TYPES.BUG).reduce((s, t) => s + appliedSP(t), 0);
+        const featureSP = periodTickets.filter(t => t.issueType === ISSUE_TYPES.STORY).reduce((s, t) => s + appliedSP(t), 0);
 
-        const totalBugCost = ticketsWithCost.filter(t => t.issueType === ISSUE_TYPES.BUG).reduce((s, t) => s + t.estimatedCost, 0);
+        // Total allocated cost for all period tickets (from allocation table)
+        const totalAllocatedCost = periodTickets.reduce((s, t) => s + (t.allocatedAmount || 0), 0);
+        // Capitalized = STORY tickets on capitalizable projects
+        const capAllocatedCost = periodTickets
+            .filter(t => t.issueType === ISSUE_TYPES.STORY && t.project?.isCapitalizable)
+            .reduce((s, t) => s + (t.allocatedAmount || 0), 0);
+        // Bug cost = all bug tickets' allocated amount
+        const totalBugCost = periodTickets
+            .filter(t => t.issueType === ISSUE_TYPES.BUG)
+            .reduce((s, t) => s + (t.allocatedAmount || 0), 0);
+        const bugAllocatedCost = periodTickets
+            .filter(t => t.issueType === ISSUE_TYPES.BUG)
+            .reduce((s, t) => s + (t.allocatedAmount || 0), 0);
+
         const totalDevSpend = Object.values(devPeriodCost).reduce((a, b) => a + b, 0);
 
         return NextResponse.json({
@@ -207,13 +237,14 @@ export async function GET(request: NextRequest) {
                 totalStoryPoints: totalSP,
                 bugStoryPoints: bugSP,
                 featureStoryPoints: featureSP,
-                capRatio: totalSP > 0 ? Math.round((capSP / totalSP) * 100) : 0,
-                bugRatio: totalSP > 0 ? Math.round((bugSP / totalSP) * 100) : 0,
+                // Ratios driven by allocatedAmount (applied SP allocation table)
+                capRatio: totalAllocatedCost > 0 ? Math.round((capAllocatedCost / totalAllocatedCost) * 100) : 0,
+                bugRatio: totalAllocatedCost > 0 ? Math.round((bugAllocatedCost / totalAllocatedCost) * 100) : 0,
                 avgCycleTimeDays: Math.round(avgCycleTime * 10) / 10,
                 medianCycleTimeDays: medianCycleTime,
                 totalBugCost,
                 totalDevSpend,
-                activeDevelopers: developers.length,
+                activeDevelopers,
             },
             monthlyDistribution,
             cycleTimeBuckets,

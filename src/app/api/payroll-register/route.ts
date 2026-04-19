@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAdmin } from '@/lib/auth';
 
 interface EntryRow {
     developerId: string;
@@ -25,8 +26,11 @@ interface DevRow {
     role: string;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        const auth = await requireAdmin(request);
+        if (auth instanceof NextResponse) return auth;
+
         const developers: DevRow[] = await prisma.developer.findMany({
             where: { isActive: true },
             select: { id: true, name: true, email: true, role: true },

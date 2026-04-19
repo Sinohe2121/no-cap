@@ -66,7 +66,7 @@ export default function DevelopersPage() {
     const load = useCallback(() => {
         setLoading(true);
         fetch(`/api/developers?${apiParams}`)
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : [])
             .then(setDevelopers)
             .finally(() => setLoading(false));
     }, [apiParams]);

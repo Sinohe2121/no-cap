@@ -106,9 +106,9 @@ export default function UsersPage() {
 
     useEffect(() => {
         fetch('/api/admin')
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : { users: [], roles: [] })
             .then((data) => {
-                setUsers(data.users);
+                setUsers(data.users ?? []);
                 if (data.roles) setRoles(data.roles);
             })
             .finally(() => setLoading(false));

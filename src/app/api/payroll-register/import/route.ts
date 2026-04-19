@@ -21,14 +21,18 @@ export async function POST(request: Request) {
         const year = pd.getFullYear();
 
         // Lock fringe benefit rate from GlobalConfig at import time
-        const fringeConfig = await prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } });
+        const [fringeConfig, meetingConfig] = await Promise.all([
+            prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
+        ]);
         const fringeBenefitRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const meetingTimeRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
 
         // Upsert the PayrollImport for this pay date
         const payrollImport = await prisma.payrollImport.upsert({
             where: { payDate: pd },
-            update: { label, fringeBenefitRate },
-            create: { label, payDate: pd, year, fringeBenefitRate },
+            update: { label, fringeBenefitRate, meetingTimeRate },
+            create: { label, payDate: pd, year, fringeBenefitRate, meetingTimeRate },
         });
 
         // Resolve developer IDs by email

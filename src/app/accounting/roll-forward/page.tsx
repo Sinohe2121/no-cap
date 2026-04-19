@@ -72,9 +72,11 @@ export default function RollForwardPage() {
     // Fetch available periods on mount
     useEffect(() => {
         fetch('/api/accounting/periods')
-            .then(r => r.json())
-            .then((raw: Array<{ id: string; month: number; year: number }>) => {
-                const opts: PeriodOption[] = raw.map(p => ({
+            .then(r => r.ok ? r.json() : [])
+            .then((raw: unknown) => {
+                const list: Array<{ id: string; month: number; year: number }> =
+                    Array.isArray(raw) ? raw : (raw as any)?.periods ?? [];
+                const opts: PeriodOption[] = list.map(p => ({
                     ...p,
                     label: `${MONTHS[p.month - 1]} ${p.year}`,
                     value: `${p.year}-${String(p.month).padStart(2, '0')}`,
@@ -84,7 +86,8 @@ export default function RollForwardPage() {
                 if (opts.length > 0) {
                     setEndPeriod(opts[opts.length - 1].value);
                 }
-            });
+            })
+            .catch(() => {});
     }, []);
 
     // Fetch roll-forward data when period selection changes
@@ -108,7 +111,7 @@ export default function RollForwardPage() {
         endDate = `${ey}-${String(em).padStart(2, '0')}-${lastDay}`;
 
         fetch(`/api/accounting/roll-forward?start=${startDate}&end=${endDate}`)
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : null)
             .then(d => { setData(d); setLoading(false); })
             .catch(() => setLoading(false));
     }, [startPeriod, endPeriod]);

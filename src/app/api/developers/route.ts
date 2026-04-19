@@ -71,10 +71,18 @@ export async function GET(request: NextRequest) {
                 return pd >= payrollStart && pd <= payrollEnd;
             });
 
+            // Fallback: if no payroll for the selected period, use the most recent available entry
+            // This ensures loaded cost is shown even when viewing a period without payroll (e.g. current month)
+            const effectiveEntries = relevantEntries.length > 0
+                ? relevantEntries
+                : [...dev.payrollEntries].sort(
+                    (a, b) => new Date(b.payrollImport.payDate).getTime() - new Date(a.payrollImport.payDate).getTime()
+                  ).slice(0, 1);
+
             // Sum actual payroll data
-            const totalSalary = relevantEntries.reduce((s, pe) => s + pe.grossSalary, 0);
-            const totalFringe = relevantEntries.reduce((s, pe) => s + (pe.grossSalary * (pe.payrollImport.fringeBenefitRate ?? 0)), 0);
-            const totalSbc = relevantEntries.reduce((s, pe) => s + (pe.sbcAmount || 0), 0);
+            const totalSalary = effectiveEntries.reduce((s, pe) => s + pe.grossSalary, 0);
+            const totalFringe = effectiveEntries.reduce((s, pe) => s + (pe.grossSalary * (pe.payrollImport.fringeBenefitRate ?? 0)), 0);
+            const totalSbc = effectiveEntries.reduce((s, pe) => s + (pe.sbcAmount || 0), 0);
             const totalLoadedCost = totalSalary + totalFringe + totalSbc;
 
             // For "monthly salary" column: average across periods, or total if single month

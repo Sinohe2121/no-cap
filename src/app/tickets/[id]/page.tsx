@@ -50,7 +50,7 @@ interface TicketDetail {
         resolutionDate: string | null;
         fixVersion: string | null;
         importPeriod: string | null;
-        capitalizedAmount: number;
+        allocatedAmount: number;
         amortizationMonths: number;
         createdAt: string;
         customFields?: Record<string, string> | null;
@@ -83,7 +83,7 @@ export default function TicketDetailPage() {
 
     useEffect(() => {
         fetch(`/api/tickets/${ticketId}`)
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : null)
             .then(setData)
             .finally(() => setLoading(false));
     }, [ticketId]);
@@ -131,11 +131,11 @@ export default function TicketDetailPage() {
         .filter(r => r.year < nowYear || (r.year === nowYear && r.month <= nowMonth))
         .pop();
     const amortizedToDate = currentRow ? currentRow.cumulativeAmortization : 0;
-    const netBookValue = currentRow ? currentRow.netBookValue : ticket.capitalizedAmount;
+    const netBookValue = currentRow ? currentRow.netBookValue : ticket.allocatedAmount;
 
     // Check if this ticket was expensed outright (not capitalized)
     const totalAllocated = auditTrails.reduce((sum, at) => sum + at.allocatedAmount, 0);
-    const isFullyExpensed = ticket.capitalizedAmount <= 0 && totalAllocated > 0;
+    const isFullyExpensed = ticket.allocatedAmount <= 0 && totalAllocated > 0;
 
     return (
         <div className={styles.pageWrapper}>
@@ -243,7 +243,7 @@ export default function TicketDetailPage() {
                             <DollarSign className="w-3 h-3" style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
                             Capitalized Amount
                         </div>
-                        <div className={styles.cardValue}>{formatCurrency(ticket.capitalizedAmount)}</div>
+                        <div className={styles.cardValue}>{formatCurrency(ticket.allocatedAmount)}</div>
                         <div className={styles.cardSub}>
                             {ticket.amortizationMonths}-month useful life
                         </div>
@@ -256,7 +256,7 @@ export default function TicketDetailPage() {
                         </div>
                         <div className={styles.cardValue}>{formatCurrency(amortizedToDate)}</div>
                         <div className={styles.cardSub}>
-                            {formatCurrency(ticket.capitalizedAmount / ticket.amortizationMonths)}/mo depreciation
+                            {formatCurrency(ticket.allocatedAmount / ticket.amortizationMonths)}/mo depreciation
                         </div>
                     </div>
 
@@ -267,8 +267,8 @@ export default function TicketDetailPage() {
                         </div>
                         <div className={styles.cardValue}>{formatCurrency(netBookValue)}</div>
                         <div className={styles.cardSub}>
-                            {ticket.capitalizedAmount > 0
-                                ? `${Math.round((netBookValue / ticket.capitalizedAmount) * 100)}% remaining`
+                            {ticket.allocatedAmount > 0
+                                ? `${Math.round((netBookValue / ticket.allocatedAmount) * 100)}% remaining`
                                 : 'No capitalized cost'}
                         </div>
                     </div>

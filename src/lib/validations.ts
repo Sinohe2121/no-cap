@@ -199,10 +199,7 @@ export const JiraImportSchema = z.object({
         assigneeName: z.string(),
         customFields: z.record(z.string(), z.string()).optional(),
     })).min(1, 'At least one ticket is required'),
-    importPeriod: z.object({
-        month: z.number().int().min(1).max(12),
-        year: z.number().int().min(2000),
-    }).optional(),
+    importPeriod: z.string().optional(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -224,8 +221,14 @@ export const PayrollRegisterImportSchema = z.object({
     rows: z.array(z.object({
         email: z.string().email(),
         name: z.string(),
-        grossSalary: z.number().min(0),
-        sbcAmount: z.number().min(0).optional(),
+        grossSalary: z.preprocess(
+            (v) => typeof v === 'string' ? parseFloat(v.replace(/[$,\s]/g, '')) : v,
+            z.number().min(0)
+        ),
+        sbcAmount: z.preprocess(
+            (v) => (v == null || v === '') ? 0 : typeof v === 'string' ? parseFloat(v.replace(/[$,\s]/g, '')) : v,
+            z.number().min(0)
+        ).optional(),
     })).min(1, 'At least one row is required'),
 });
 

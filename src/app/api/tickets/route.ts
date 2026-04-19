@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
         let formatted = tickets.map((t: any) => {
             const allocatedCost = t.auditTrails.reduce((sum: number, a: { allocatedAmount: number }) => sum + a.allocatedAmount, 0);
-            const capAmount = allocatedCost > 0 ? allocatedCost : t.capitalizedAmount;
+            const capAmount = allocatedCost > 0 ? allocatedCost : t.allocatedAmount;
             const amortMonths = t.amortizationMonths || 36;
 
             // Compute amortization inline (same logic as calculateTicketAmortization)
@@ -60,8 +60,8 @@ export async function GET(request: Request) {
                 assignee: t.assignee,
                 assigneeId: t.assigneeId,
                 project: t.project,
-                allocatedCost,
-                capitalizedAmount: capAmount,
+                allocatedCost: capAmount,
+                allocatedAmount: capAmount,
                 amortizationMonths: amortMonths,
                 monthlyAmortization,
                 accumulatedAmortization,
@@ -93,9 +93,11 @@ export async function GET(request: Request) {
             });
         }
 
-        const configRow = await prisma.globalConfig.findUnique({
-            where: { key: 'jira_custom_fields' },
-        });
+        const [configRow, bugSpRow, otherSpRow] = await Promise.all([
+            prisma.globalConfig.findUnique({ where: { key: 'jira_custom_fields' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        ]);
         
         let customFieldsConfig: { id: string; name: string }[] = [];
         if (configRow && configRow.value) {
@@ -109,7 +111,10 @@ export async function GET(request: Request) {
             } catch {}
         }
 
-        return NextResponse.json({ tickets: formatted, customFieldsConfig });
+        const bugSpFallback  = parseFloat(bugSpRow?.value  ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpRow?.value ?? '1') || 1;
+
+        return NextResponse.json({ tickets: formatted, customFieldsConfig, bugSpFallback, otherSpFallback });
     } catch (error) {
         console.error('Tickets API error:', error);
         return NextResponse.json({ error: 'Failed to load tickets' }, { status: 500 });

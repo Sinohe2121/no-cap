@@ -16,6 +16,7 @@ export const ACCOUNTS = {
     RD_EXPENSE_SOFTWARE:    'R&D Expense — Software',
     AMORTIZATION_EXPENSE:   'Amortization Expense',
     ACCRUED_PAYROLL:        'Accrued Payroll / Cash',
+    OVERHEAD_PAYROLL:       'Payroll Expense — Overhead / Meetings',
 } as const;
 
 export type AccountName = typeof ACCOUNTS[keyof typeof ACCOUNTS];
@@ -26,6 +27,9 @@ export type AccountName = typeof ACCOUNTS[keyof typeof ACCOUNTS];
 export const ENTRY_TYPES = {
     CAPITALIZATION: 'CAPITALIZATION',
     EXPENSE:        'EXPENSE',
+    EXPENSE_BUG:    'EXPENSE_BUG',   // Bug-ticket costs (all projects)
+    EXPENSE_TASK:   'EXPENSE_TASK',  // Task/Epic/Subtask costs (non-cap projects)
+    ADJUSTMENT:     'ADJUSTMENT',    // Meeting-time overhead deduction
     AMORTIZATION:   'AMORTIZATION',
 } as const;
 

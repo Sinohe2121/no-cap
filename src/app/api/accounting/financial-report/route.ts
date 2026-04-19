@@ -42,11 +42,23 @@ export async function GET(request: Request) {
             return periodDate >= filterStart && periodDate <= filterEnd;
         });
 
+        // Helper: compute live totals from actual journal entry rows.
+        // The stored `totalCapitalized / totalExpensed / totalAmortization` columns on
+        // AccountingPeriod are only written when entries are (re-)generated via POST.
+        // If they were never updated (or the seed left them as 0) the widget shows zeros
+        // even though JournalEntry rows exist — so we always derive fresh values here.
+        const liveCap   = (p: typeof allPeriods[0]) =>
+            p.journalEntries.filter(e => e.entryType === 'CAPITALIZATION').reduce((s, e) => s + e.amount, 0);
+        const liveExp   = (p: typeof allPeriods[0]) =>
+            p.journalEntries.filter(e => ['EXPENSE', 'EXPENSE_BUG', 'EXPENSE_TASK'].includes(e.entryType)).reduce((s, e) => s + e.amount, 0);
+        const liveAmort = (p: typeof allPeriods[0]) =>
+            p.journalEntries.filter(e => e.entryType === 'AMORTIZATION').reduce((s, e) => s + e.amount, 0);
+
         // Build running cumulative totals across ALL periods (for balance-sheet accounts)
         // We need balances from all historical periods up to and including each filtered period
         const colHeaders: string[] = []; // "Jan 2026" etc.
 
-        // P&L: period-only values
+        // P&L: period-only values (live from journal entries)
         const plCapitalization: (number | null)[] = [];
         const plExpense: (number | null)[] = [];
         const plAmortization: (number | null)[] = [];
@@ -58,8 +70,8 @@ export async function GET(request: Request) {
         let runCap = 0;
         let runAccAmort = 0;
         for (const p of allPeriods) {
-            runCap += p.totalCapitalized;
-            runAccAmort += p.totalAmortization;
+            runCap    += liveCap(p);
+            runAccAmort += liveAmort(p);
             cumulativeByPeriod.set(`${p.year}-${p.month}`, { cap: runCap, accAmort: runAccAmort });
         }
 
@@ -68,9 +80,9 @@ export async function GET(request: Request) {
             const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             colHeaders.push(`${MONTH_ABBR[period.month - 1]} ${period.year}`);
 
-            plCapitalization.push(period.totalCapitalized);
-            plExpense.push(period.totalExpensed);
-            plAmortization.push(period.totalAmortization);
+            plCapitalization.push(liveCap(period));
+            plExpense.push(liveExp(period));
+            plAmortization.push(liveAmort(period));
         }
 
         // Build balance-sheet rows (cumulative as of end of each period)

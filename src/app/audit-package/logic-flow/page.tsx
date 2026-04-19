@@ -43,7 +43,7 @@ interface FlowState {
         capitalizedTickets: number;
         expensedTickets: number;
         amortizingTickets: number;
-        capitalizedAmount: number;
+        allocatedAmount: number;
         expensedAmount: number;
         amortizationAmount: number;
     };
@@ -321,7 +321,7 @@ export default function LogicFlowPage() {
                 <div className={styles.summaryCard}>
                     <div className={styles.summaryLabel}>Capitalized</div>
                     <div className={`${styles.summaryValue} ${styles.capitalize}`}>
-                        {fmt(flow.stats.capitalizedAmount)}
+                        {fmt(flow.stats.allocatedAmount)}
                     </div>
                 </div>
                 <div className={styles.summaryCard}>

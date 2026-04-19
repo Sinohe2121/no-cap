@@ -76,6 +76,7 @@ export default function DevelopersDashboardPage() {
     const [gridData, setGridData] = useState<GridDataPoint[]>([]);
     const [donutData, setDonutData] = useState<{name: string, value: number}[]>([]);
     const [velocityData, setVelocityData] = useState<VelocityRow[]>([]);
+    const [openTicketDevCount, setOpenTicketDevCount] = useState(0);
     const [expandedDevId, setExpandedDevId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const { apiParams, range, preset } = usePeriod();
@@ -101,18 +102,24 @@ export default function DevelopersDashboardPage() {
         }).toString();
 
         Promise.all([
-            fetch(`/api/developers?${apiParams}`).then((res) => res.json()),
-            fetch(`/api/tickets?${extendedParams}`).then((res) => res.json()),
-            fetch(`/api/projects/cost-by-type?${extendedParams}`).then((res) => res.json()),
+            fetch(`/api/developers?${apiParams}`).then((res) => res.ok ? res.json() : []),
+            fetch(`/api/tickets?${extendedParams}`).then((res) => res.ok ? res.json() : { tickets: [] }),
+            fetch(`/api/projects/cost-by-type?${extendedParams}`).then((res) => res.ok ? res.json() : []),
+            // Fetch payroll imports so chart headcount uses payroll data (not just ticket assignees)
+            fetch(`/api/accounting/periods?${extendedParams}`).then(r => r.ok ? r.json() : []).catch(() => []),
         ])
-        .then(([devRaw, ticRaw, costByType]) => {
+        .then(([devRaw, ticRaw, costByType, _periodsRaw]) => {
+            // Build per-month payroll headcount from developer period cost
+            // We use periodCost > 0 as a proxy: any dev with cost in the period was in payroll
+            // For per-month chart data we use the payroll-based count from the top-level developers list
             const devs: Developer[] = Array.isArray(devRaw) ? devRaw : [];
             const ticks = ticRaw.tickets ? ticRaw.tickets : [];
             setDevelopers(devs);
 
-            // Build a lookup of monthly total costs from payroll distribution
-            // costByType returns: [{ label: "Feb 2026", Story: $, Bug: $, ... }]
+            // Build a lookup of monthly total costs and headcount from payroll distribution
+            // costByType returns: [{ label: "Feb 2026", Story: $, Bug: $, headcount: N, ... }]
             const monthlyCostLookup: Record<string, number> = {};
+            const headcountByMonth: Record<string, number> = {};
             let totalCapex = 0;
             let totalOpex = 0;
             if (Array.isArray(costByType)) {
@@ -124,9 +131,14 @@ export default function DevelopersDashboardPage() {
                     const shortLabel = parts.length === 2 ? `${parts[0]} ${parts[1].slice(2)}` : entry.label;
                     monthlyCostLookup[entry.label] = monthTotal;
                     monthlyCostLookup[shortLabel] = monthTotal;
-                    // CapEx = Story cost on capitalizable projects, OpEx = everything else
-                    totalCapex += (entry.Story || 0);
-                    totalOpex += (entry.Bug || 0) + (entry.Task || 0) + (entry.Epic || 0) + (entry.Subtask || 0);
+                    // Headcount from payroll register, keyed by both label formats
+                    headcountByMonth[entry.label] = entry.headcount || 0;
+                    headcountByMonth[shortLabel] = entry.headcount || 0;
+                    // CapEx = STORY on capitalizable projects (from API Capex field)
+                    // OpEx = everything else (bug, task, epic, subtask + non-cap stories)
+                    const capex = entry.Capex || 0;
+                    totalCapex += capex;
+                    totalOpex += monthTotal - capex;
                 }
             }
 
@@ -179,9 +191,8 @@ export default function DevelopersDashboardPage() {
             }
 
             // Track unique assignees per month for headcount
-            // AND accumulate ticket-level allocatedCost as fallback when payroll data is missing
             const monthAssignees: Record<string, Set<string>> = {};
-            const ticketCostPerMonth: Record<string, number> = {};
+
             ticks.forEach((t: any) => {
                 // Use the original Jira creation date, not the DB import timestamp
                 const jiraCreated = t.customFields?.Created;
@@ -196,24 +207,14 @@ export default function DevelopersDashboardPage() {
                         if (!monthAssignees[ml]) monthAssignees[ml] = new Set();
                         monthAssignees[ml].add(assigneeId);
                     }
-                    // Accumulate ticket-level allocatedCost per month
-                    if (t.allocatedCost > 0) {
-                        ticketCostPerMonth[ml] = (ticketCostPerMonth[ml] || 0) + t.allocatedCost;
-                    }
                 }
             });
 
-            // Set headcount per month from unique assignees
-            // Also fill in allocatedCost from ticket data when payroll cost is missing
-            for (const [ml, assigneeSet] of Object.entries(monthAssignees)) {
-                if (monthsMap[ml]) {
-                    monthsMap[ml].headcount = assigneeSet.size;
-                }
-            }
-            for (const [ml, cost] of Object.entries(ticketCostPerMonth)) {
-                if (monthsMap[ml] && monthsMap[ml].allocatedCost === 0) {
-                    monthsMap[ml].allocatedCost = cost;
-                }
+            // Set headcount per month from payroll register data.
+            // headcountByMonth comes from cost-by-type which counts unique devs per payroll import.
+            // Months with no payroll import will not appear in headcountByMonth → 0.
+            for (const [ml] of Object.entries(monthsMap)) {
+                monthsMap[ml].headcount = headcountByMonth[ml] || 0;
             }
 
             // Sort chronologically 
@@ -306,14 +307,37 @@ export default function DevelopersDashboardPage() {
 
             setVelocityData(velocityRows);
 
+            // ── Open/In-Progress count (devs with tickets CREATED in period but NOT resolved) ──
+            // These are the devs who show up in the "41" Team View count but not in the "31" resolved count
+            const resolvedDevIds = new Set(velocityRows.map(v => v.devId));
+            const createdInPeriodDevIds = new Set<string>();
+            const periodStart = new Date(range.start);
+            const periodEnd = new Date(range.end);
+            periodStart.setHours(0, 0, 0, 0);
+            periodEnd.setHours(23, 59, 59, 999);
+            ticks.forEach((t: any) => {
+                const jiraCreated = t.customFields?.Created;
+                const d = new Date(jiraCreated || t.createdAt);
+                if (isNaN(d.getTime())) return;
+                if (d < periodStart || d > periodEnd) return;
+                const assigneeId = typeof t.assignee === 'object' ? t.assignee?.id : t.assigneeId;
+                if (assigneeId) createdInPeriodDevIds.add(assigneeId);
+            });
+            // Open = created in period but zero resolved tickets in velocityRows
+            const openCount = Array.from(createdInPeriodDevIds).filter(id => !resolvedDevIds.has(id)).length;
+            setOpenTicketDevCount(openCount);
+
         })
         .finally(() => setLoading(false));
     }, [apiParams]);
 
-    // Derived KPI Headers
-    const latestAvgCost = gridData.length > 0 ? gridData[gridData.length - 1].avgCost : 0;
-    const latestVariance = gridData.length > 0 ? gridData[gridData.length - 1].variance : 0;
-    const currentHeadcount = developers.filter(d => d.isActive !== false).length;
+    // Use the last month that has actual cost data (not the current in-progress month which may be $0)
+    const lastActiveMonth = [...gridData].reverse().find(d => d.allocatedCost > 0 || d.ticketCount > 0) ?? gridData[gridData.length - 1];
+    const latestAvgCost = lastActiveMonth?.avgCost ?? 0;
+    const latestVariance = lastActiveMonth?.variance ?? 0;
+    // Use headcount from the same payroll-derived source as the chart (headcountByMonth)
+    // so the KPI headline and chart line are always in sync
+    const currentHeadcount = lastActiveMonth?.headcount ?? developers.filter(d => (d.periodCost || 0) > 0).length;
     const capexCap = donutData.length > 0 ? donutData[0].value : 0;
     const opexCap = donutData.length > 0 ? donutData[1].value : 0;
     const capexRatio = capexCap + opexCap > 0 ? Math.round((capexCap / (capexCap + opexCap)) * 100) : 0;
@@ -631,58 +655,74 @@ export default function DevelopersDashboardPage() {
                                 })}
                             </div>
 
-                            {/* Right: Team Composition Donut */}
+                            {/* Right: Ticket Coverage Donut */}
                             <div className="flex flex-col items-center justify-start flex-shrink-0" style={{ width: 200 }}>
-                                <h3 className="text-[10px] font-extrabold text-[#A4A9B6] tracking-widest uppercase mb-3">Team Composition</h3>
-                                <ResponsiveContainer width={160} height={160}>
-                                    <PieChart>
-                                        <Pie
-                                            data={teamDonut}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            cx="50%" cy="50%"
-                                            innerRadius={45}
-                                            outerRadius={70}
-                                            strokeWidth={2}
-                                            stroke="#fff"
-                                        >
-                                            {teamDonut.map((_, i) => (
-                                                <Cell key={i} fill={TEAM_COLORS[i % TEAM_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip
-                                            contentStyle={{ ...TOOLTIP_STYLE, padding: 8, fontSize: 11 }}
-                                            formatter={(value: number | undefined) => [value ?? 0, 'Devs']}
-                                        />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div className="text-center -mt-2 mb-3">
-                                    <span className="text-[22px] font-black" style={{ color: '#3F4450' }}>{velocityData.length}</span>
-                                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: '#A4A9B6' }}>Active Devs</span>
-                                </div>
-                                {/* Legend */}
-                                <div className="flex flex-col gap-1.5 w-full px-2">
-                                    {teamDonut.map((entry, i) => (
-                                        <div key={entry.name} className="flex items-center justify-between text-[11px]">
-                                            <span className="flex items-center gap-1.5">
-                                                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: TEAM_COLORS[i % TEAM_COLORS.length] }} />
-                                                <span className="font-semibold" style={{ color: '#3F4450' }}>{entry.name}</span>
-                                            </span>
-                                            <span className="font-bold" style={{ color: '#717684' }}>{entry.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                {/* Summary Stats */}
-                                <div className="mt-4 pt-3 border-t border-[#EEF0F4] w-full flex flex-col gap-2 px-2">
-                                    <div className="flex justify-between text-[10px]">
-                                        <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Avg SP/Dev</span>
-                                        <span className="font-black" style={{ color: '#3F4450' }}>{avgSP}</span>
-                                    </div>
-                                    <div className="flex justify-between text-[10px]">
-                                        <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Top Performer</span>
-                                        <span className="font-black truncate ml-2" style={{ color: '#4141A2', maxWidth: 80 }}>{topPerformer.split(',')[0]}</span>
-                                    </div>
-                                </div>
+                                <h3 className="text-[10px] font-extrabold text-[#A4A9B6] tracking-widest uppercase mb-3">Ticket Coverage</h3>
+                                {(() => {
+                                    const withTickets = velocityData.length; // resolved in period
+                                    const withoutTickets = Math.max(0, currentHeadcount - withTickets - openTicketDevCount);
+                                    const COVERAGE_COLORS = ['#4141A2', '#F5A623', '#E2E4E9'];
+                                    const coverageDonut = [
+                                        { name: 'Closed Tickets', value: withTickets },
+                                        ...(openTicketDevCount > 0 ? [{ name: 'Open / In-Progress', value: openTicketDevCount }] : []),
+                                        ...(withoutTickets > 0 ? [{ name: 'No Tickets', value: withoutTickets }] : []),
+                                    ];
+                                    const coveragePct = currentHeadcount > 0 ? Math.round((withTickets / currentHeadcount) * 100) : 0;
+                                    return (
+                                        <>
+                                            <div className="relative" style={{ width: 160, height: 160 }}>
+                                                <ResponsiveContainer width={160} height={160}>
+                                                    <PieChart>
+                                                        <Pie
+                                                            data={coverageDonut}
+                                                            dataKey="value"
+                                                            nameKey="name"
+                                                            cx="50%" cy="50%"
+                                                            innerRadius={45}
+                                                            outerRadius={70}
+                                                            strokeWidth={2}
+                                                            stroke="#fff"
+                                                            startAngle={90}
+                                                            endAngle={-270}
+                                                        >
+                                                            {coverageDonut.map((_, i) => (
+                                                                <Cell key={i} fill={COVERAGE_COLORS[i % COVERAGE_COLORS.length]} />
+                                                            ))}
+                                                        </Pie>
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                                {/* Center label */}
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                                    <span className="text-[22px] font-black leading-none" style={{ color: '#3F4450' }}>{currentHeadcount}</span>
+                                                    <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: '#A4A9B6' }}>Total FTEs</span>
+                                                </div>
+                                            </div>
+                                            {/* Legend */}
+                                            <div className="flex flex-col gap-1.5 w-full px-2 mt-1">
+                                                {coverageDonut.map((entry, i) => (
+                                                    <div key={entry.name} className="flex items-center justify-between text-[11px]">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COVERAGE_COLORS[i] }} />
+                                                            <span className="font-semibold" style={{ color: '#3F4450' }}>{entry.name}</span>
+                                                        </span>
+                                                        <span className="font-bold" style={{ color: '#717684' }}>{entry.value}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {/* Summary Stats */}
+                                            <div className="mt-4 pt-3 border-t border-[#EEF0F4] w-full flex flex-col gap-2 px-2">
+                                                <div className="flex justify-between text-[10px]">
+                                                    <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Coverage</span>
+                                                    <span className="font-black" style={{ color: coveragePct >= 80 ? '#21944E' : '#F5A623' }}>{coveragePct}%</span>
+                                                </div>
+                                                <div className="flex justify-between text-[10px]">
+                                                    <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Top Performer</span>
+                                                    <span className="font-black truncate ml-2" style={{ color: '#4141A2', maxWidth: 80 }}>{topPerformer.split(',')[0]}</span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
 

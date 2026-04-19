@@ -109,14 +109,14 @@ export default function ProjectDetailPage() {
 
     useEffect(() => {
         fetch(`/api/projects/${params.id}`)
-            .then((res) => res.json())
+            .then((res) => res.ok ? res.json() : null)
             .then(setProject)
             .finally(() => setLoading(false));
     }, [params.id]);
 
     const loadAmort = useCallback(() => {
         fetch(`/api/projects/${params.id}/amortization`)
-            .then((r) => r.json())
+            .then((r) => r.ok ? r.json() : null)
             .then(setAmortData);
     }, [params.id]);
 

@@ -24,6 +24,7 @@ interface PeriodDetail {
     payDate: string;
     year: number;
     fringeBenefitRate: number;
+    meetingTimeRate: number;
     entries: EntryRow[];
 }
 
@@ -47,8 +48,8 @@ export default function PayrollPeriodDetailPage() {
 
     useEffect(() => {
         Promise.all([
-            fetch(`/api/payroll-register/period?id=${periodId}`).then(r => r.json()),
-            fetch('/api/developers').then(r => r.json()),
+            fetch(`/api/payroll-register/period?id=${periodId}`).then(r => r.ok ? r.json() : null),
+            fetch('/api/developers').then(r => r.ok ? r.json() : []),
         ])
         .then(([periodData, devData]) => {
             setPeriod(periodData);
@@ -86,11 +87,14 @@ export default function PayrollPeriodDetailPage() {
     developers.forEach(d => { devMap[d.id] = d; });
 
     const fringeRate = period.fringeBenefitRate ?? 0.25;
+    const meetingRate = period.meetingTimeRate ?? 0;
 
     const totalSalary = period.entries.reduce((s, e) => s + e.grossSalary, 0);
     const totalFringe = period.entries.reduce((s, e) => s + (e.grossSalary * fringeRate), 0);
     const totalSbc = period.entries.reduce((s, e) => s + (e.sbcAmount || 0), 0);
     const grandTotal = totalSalary + totalFringe + totalSbc;
+    const totalMeetingAdj = grandTotal * meetingRate;
+    const grandNetCost = grandTotal - totalMeetingAdj;
 
     return (
         <div>
@@ -113,12 +117,17 @@ export default function PayrollPeriodDetailPage() {
                 </div>
             </div>
 
-            {/* Fringe rate badge */}
+            {/* Fringe + Meeting rate badges */}
             <div className="flex items-center gap-3 mb-6">
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg" style={{ background: '#F0F0FA', border: '1px solid #D8D8F0' }}>
                     <span className="text-xs font-medium" style={{ color: '#717684' }}>Fringe Benefit Rate</span>
                     <span className="text-sm font-bold tabular-nums" style={{ color: '#4141A2' }}>{formatPercent(fringeRate)}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: '#E8E8F5', color: '#717684' }}>locked at import</span>
+                </div>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg" style={{ background: '#FFF8E1', border: '1px solid #FFE082' }}>
+                    <span className="text-xs font-medium" style={{ color: '#717684' }}>Meeting Time Rate</span>
+                    <span className="text-sm font-bold tabular-nums" style={{ color: '#D3A236' }}>{formatPercent(meetingRate)}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: '#FFF3CD', color: '#7A5800' }}>locked at import</span>
                 </div>
             </div>
 
@@ -133,6 +142,8 @@ export default function PayrollPeriodDetailPage() {
                             <th className="text-right">Fringe Benefits</th>
                             <th className="text-right">SBC</th>
                             <th className="text-right">Total Cost</th>
+                            <th className="text-right">Meeting Adj.</th>
+                            <th className="text-right">Net Allocated Cost</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -141,6 +152,8 @@ export default function PayrollPeriodDetailPage() {
                             const fringe = entry.grossSalary * fringeRate;
                             const sbc = entry.sbcAmount || 0;
                             const rowTotal = entry.grossSalary + fringe + sbc;
+                            const meetingAdj = rowTotal * meetingRate;
+                            const netCost = rowTotal - meetingAdj;
                             return (
                                 <tr key={entry.developerId}>
                                     <td>
@@ -159,6 +172,12 @@ export default function PayrollPeriodDetailPage() {
                                     </td>
                                     <td className="text-right font-semibold tabular-nums" style={{ color: '#3F4450' }}>
                                         {formatCurrency(rowTotal)}
+                                    </td>
+                                    <td className="text-right tabular-nums" style={{ color: meetingAdj > 0 ? '#D3A236' : '#A4A9B6' }}>
+                                        {meetingAdj > 0 ? `(${formatCurrency(meetingAdj)})` : '—'}
+                                    </td>
+                                    <td className="text-right font-bold tabular-nums" style={{ color: '#21944E' }}>
+                                        {formatCurrency(netCost)}
                                     </td>
                                 </tr>
                             );
@@ -179,6 +198,12 @@ export default function PayrollPeriodDetailPage() {
                             </td>
                             <td className="text-right font-bold tabular-nums" style={{ color: '#FA4338' }}>
                                 {formatCurrency(grandTotal)}
+                            </td>
+                            <td className="text-right font-bold tabular-nums" style={{ color: totalMeetingAdj > 0 ? '#D3A236' : '#A4A9B6' }}>
+                                {totalMeetingAdj > 0 ? `(${formatCurrency(totalMeetingAdj)})` : '—'}
+                            </td>
+                            <td className="text-right font-bold tabular-nums" style={{ color: '#21944E' }}>
+                                {formatCurrency(grandNetCost)}
                             </td>
                         </tr>
                     </tfoot>

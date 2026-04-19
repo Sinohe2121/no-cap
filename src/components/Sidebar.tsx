@@ -12,8 +12,6 @@ import {
     Settings,
     BarChart2,
     Activity,
-    Package,
-    GitCompareArrows,
     UsersRound,
     ChevronLeft,
     ChevronRight,
@@ -37,9 +35,7 @@ const navItems = [
     { href: '/team-view', label: 'Team View', icon: UsersRound },
     { href: '/accounting', label: 'Accounting', icon: BookOpen },
     { href: '/reports', label: 'Reports', icon: BarChart2 },
-    { href: '/reports/period-comparison', label: 'Period Comparison', icon: GitCompareArrows },
-    { href: '/audit-package', label: 'Audit Package', icon: Package },
-    { href: '/admin', label: 'Admin Portal', icon: Settings },
+    { href: '/admin',        label: 'Admin Portal',   icon: Settings },
 ];
 
 const SIDEBAR_EXPANDED = 260;

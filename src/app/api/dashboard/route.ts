@@ -13,11 +13,14 @@ export async function GET(request: Request) {
         const periodStart = startParam ? new Date(startParam + 'T00:00:00') : new Date(now.getFullYear(), 0, 1);
 
         // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, developers, payrollImports, allTickets, accountingPeriods] = await Promise.all([
+        const [projects, fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTickets, accountingPeriods] = await Promise.all([
             prisma.project.findMany({
                 include: { _count: { select: { tickets: true } } },
             }),
             prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
+            prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
             prisma.developer.findMany({
                 where: { isActive: true },
                 select: { id: true, fringeBenefitRate: true, stockCompAllocation: true },
@@ -36,14 +39,28 @@ export async function GET(request: Request) {
         ]);
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
+        const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+        const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
+        const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
+        /** Applied SP: use Jira value if > 0, otherwise return the appropriate fallback */
+        const appliedSP = (t: { storyPoints: number; issueType: string }) =>
+            t.storyPoints > 0 ? t.storyPoints : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
 
         // ── Pre-group tickets by assigneeId for O(1) lookup ──
         const ticketsByDev = new Map<string, typeof allTickets>();
+        // Also track which devs had ANY ticket within the selected period (for coverage metric)
+        const periodAssigneeIds = new Set<string>();
         for (const t of allTickets) {
             if (!t.assigneeId) continue;
             const arr = ticketsByDev.get(t.assigneeId);
             if (arr) arr.push(t);
             else ticketsByDev.set(t.assigneeId, [t]);
+
+            // A ticket "belongs" to the period if it was created or resolved within it
+            const ticketDate = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
+            if (ticketDate >= periodStart && ticketDate <= periodEnd) {
+                periodAssigneeIds.add(t.assigneeId);
+            }
         }
 
         // ── Build amortization lookup from all accounting periods ──
@@ -74,6 +91,8 @@ export async function GET(request: Request) {
         const projectItdCost: Record<string, number> = {};
         const monthlyData: Record<string, { capex: number; opex: number }> = {};
         let totalCapexYtd = 0;
+        let totalOpexYtd = 0;
+        let totalBugCostYtd = 0;
 
         const projectMap: Record<string, { isCapitalizable: boolean; status: string }> = {};
         for (const p of projects) {
@@ -101,7 +120,9 @@ export async function GET(request: Request) {
                 const salary = salaryByDev[dev.id] || 0;
                 const fringeRate = dev.fringeBenefitRate || globalFringeRate;
                 const sbc = dev.stockCompAllocation;
-                const totalCost = computeLoadedCost(salary, fringeRate, sbc);
+                // Apply meeting rate deduction to match journal entry calculation
+                const grossCost = computeLoadedCost(salary, fringeRate, sbc);
+                const totalCost = grossCost * (1 - globalMeetingRate);
                 if (totalCost <= 0) continue;
 
                 // O(1) lookup instead of O(n) filter
@@ -111,32 +132,35 @@ export async function GET(request: Request) {
                     return rd >= monthStart && rd <= monthEnd;
                 });
 
-                const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
+                // Use Applied SP (with fallbacks) to include 0-SP bugs/tasks
+                const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
                 if (totalPoints <= 0) continue;
 
-                // Split costs by ticket type: STORY on capitalizable+DEV project = CAPEX, else OPEX
-                const projPoints: Record<string, { points: number; isCapex: boolean }> = {};
+                // Split costs by ticket type: STORY on capitalizable project = CAPEX, else OPEX
+                const projPoints: Record<string, { points: number; isCapex: boolean; isBug: boolean }> = {};
                 for (const t of devTickets) {
                     if (!t.projectId) continue;
                     const pm = projectMap[t.projectId];
                     const isCapex = pm
                         ? pm.isCapitalizable && t.issueType === 'STORY'
                         : false;
+                    const isBug = t.issueType === 'BUG';
                     // Use composite key so same project can have both CAPEX and OPEX entries
                     const key = `${t.projectId}::${isCapex ? 'cap' : 'exp'}`;
                     if (!projPoints[key]) {
-                        projPoints[key] = { points: 0, isCapex };
+                        projPoints[key] = { points: 0, isCapex, isBug };
                     }
-                    projPoints[key].points += t.storyPoints;
+                    projPoints[key].points += appliedSP(t);
                 }
 
                 for (const [compositeKey, info] of Object.entries(projPoints)) {
                     const projId = compositeKey.split('::')[0];
                     const amount = (info.points / totalPoints) * totalCost;
-                    if (!projectItdCost[projId]) projectItdCost[projId] = 0;
-                    projectItdCost[projId] += amount;
 
                     if (info.isCapex) {
+                        // Only capitalizable STORY tickets contribute to the asset value on the bar chart
+                        if (!projectItdCost[projId]) projectItdCost[projId] = 0;
+                        projectItdCost[projId] += amount;
                         monthlyData[monthKey].capex += amount;
                     } else {
                         monthlyData[monthKey].opex += amount;
@@ -144,6 +168,10 @@ export async function GET(request: Request) {
 
                     if (isInPeriod && info.isCapex) {
                         totalCapexYtd += amount;
+                    } else if (isInPeriod && !info.isCapex) {
+                        totalOpexYtd += amount;
+                        // Track bug-specific costs separately for the breakdown card
+                        if (info.isBug) totalBugCostYtd += amount;
                     }
                 }
             }
@@ -177,13 +205,20 @@ export async function GET(request: Request) {
             legacyAmortization += p.startingAmortization;
         }
 
-        const activeDeveloperCount = developers.length;
+        // Count from the most recent payroll import, not total roster
+        const latestImport = payrollImports.length > 0
+            ? payrollImports[payrollImports.length - 1]
+            : null;
+        const payrollDevIds = new Set(latestImport?.entries.map((e) => e.developerId) ?? []);
+        const activeDeveloperCount = payrollDevIds.size;
+        // Devs in payroll who had at least one ticket in the selected period
+        const assignedDeveloperCount = Array.from(payrollDevIds).filter(id => periodAssigneeIds.has(id)).length;
 
-        // Exclude linked legacies from top projects (their cost is rolled into parent)
+
+        // All capitalized projects sorted by cost (exclude linked legacy placeholders)
         const topProjects = projectsWithCosts
             .filter((p) => p.isCapitalizable && p.totalCostForProject > 0 && !(p as any).parentProjectId)
-            .sort((a, b) => b.totalCostForProject - a.totalCostForProject)
-            .slice(0, 5);
+            .sort((a, b) => b.totalCostForProject - a.totalCostForProject);
 
         // Alerts: only flag genuinely actionable issues
         const alerts: { id: string; name: string; message: string; severity: string }[] = [];
@@ -191,7 +226,7 @@ export async function GET(request: Request) {
         // Single query to get capitalizable ticket counts per project (avoids N+1)
         const capTicketCounts = await prisma.jiraTicket.groupBy({
             by: ['projectId'],
-            where: { capitalizedAmount: { gt: 0 } },
+            where: { allocatedAmount: { gt: 0 } },
             _count: { id: true },
         });
         const capCountByProject = new Map(
@@ -259,11 +294,16 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             summary: {
-                totalAssetValue: totalCapitalizedYtd + legacyCapitalized,
-                totalExpensed: totalExpensedYtd,
+                totalAssetValue: totalCapexYtd + legacyCapitalized,
+                // Use only the payroll-loop OPEX (don't add accounting period rows — that double-counts)
+                totalExpensed: totalOpexYtd,
+                totalBugCost: totalBugCostYtd,
                 ytdAmortization: ytdAmortization + legacyAmortization,
                 activeDeveloperCount,
+                assignedDeveloperCount,
                 totalProjects: projects.length,
+                // Authoritative period total = payroll-derived cap + opex (net of meetings)
+                periodPayrollNet: totalCapexYtd + totalOpexYtd,
             },
             topProjects: topProjects.map((p) => ({
                 id: p.id,
