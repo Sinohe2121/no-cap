@@ -58,7 +58,7 @@ interface AuditDetail {
     creditAccount: string;
     amount: number;
     description: string;
-    project: { id: string; name: string; status: string };
+    project: { id: string; name: string; status: string } | null;
     period: { month: number; year: number };
     auditTrails: {
         id: string;
@@ -556,7 +556,7 @@ export default function JournalEntriesPage() {
                                     </span>
                                 </div>
                                 <p className="text-xs" style={{ color: '#A4A9B6' }}>
-                                    {auditDetail.project.name} — {MONTHS[(auditDetail.period.month || 1) - 1]} {auditDetail.period.year}
+                                    {auditDetail.project?.name ?? 'Period Adjustment'} — {MONTHS[(auditDetail.period?.month || 1) - 1]} {auditDetail.period?.year}
                                 </p>
                             </div>
                             <button onClick={() => setAuditDetail(null)} style={{ color: '#A4A9B6' }} className="hover:opacity-70">
