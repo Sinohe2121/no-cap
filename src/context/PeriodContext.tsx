@@ -146,9 +146,12 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
     const [customEnd, setCustomEnd] = useState('');
     const [fyStartMonth, setFyStartMonth] = useState<number>(() => {
         // Read synchronously from localStorage so there's no render-flash
+        // Guard against SSR (typeof window check prevents Vercel build crashes)
         try {
-            const v = localStorage.getItem(FY_STORAGE_KEY);
-            if (v) return parseInt(v, 10) || 1;
+            if (typeof window !== 'undefined') {
+                const v = localStorage.getItem(FY_STORAGE_KEY);
+                if (v) return parseInt(v, 10) || 1;
+            }
         } catch {}
         return 1;
     });
@@ -161,7 +164,7 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
             .then((d) => {
                 if (d.fiscalYearStartMonth) {
                     setFyStartMonth(d.fiscalYearStartMonth);
-                    try { localStorage.setItem(FY_STORAGE_KEY, String(d.fiscalYearStartMonth)); } catch {}
+                    try { if (typeof window !== 'undefined') localStorage.setItem(FY_STORAGE_KEY, String(d.fiscalYearStartMonth)); } catch {}
                 }
                 if (d.periodBounds) {
                     setPeriodBounds(d.periodBounds);
@@ -183,12 +186,14 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
     // Rehydrate from localStorage on mount
     useEffect(() => {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                const { preset: p, customStart: cs, customEnd: ce } = JSON.parse(stored);
-                if (p) setPresetState(p);
-                if (cs) setCustomStart(cs);
-                if (ce) setCustomEnd(ce);
+            if (typeof window !== 'undefined') {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const { preset: p, customStart: cs, customEnd: ce } = JSON.parse(stored);
+                    if (p) setPresetState(p);
+                    if (cs) setCustomStart(cs);
+                    if (ce) setCustomEnd(ce);
+                }
             }
         } catch {
             // ignore
@@ -196,7 +201,7 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const persist = useCallback((p: PeriodPreset, cs: string, ce: string) => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ preset: p, customStart: cs, customEnd: ce }));
+        try { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify({ preset: p, customStart: cs, customEnd: ce })); } catch {}
     }, []);
 
     const setPreset = useCallback((p: PeriodPreset) => {
