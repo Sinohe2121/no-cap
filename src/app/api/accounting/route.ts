@@ -469,6 +469,8 @@ export async function POST(request: Request) {
             where: {
                 allocatedAmount: { gt: 0 },
                 resolutionDate: { lt: startDate }, // resolved before this period → amortizing
+                // Bugs are never capitalized → never amortized
+                issueType: { not: 'BUG' },
             },
             include: { project: true },
         });
