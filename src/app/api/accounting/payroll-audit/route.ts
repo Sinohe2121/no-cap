@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
-import { calculatePeriodCosts } from '@/lib/calculations';
+import { cachedCalculatePeriodCosts } from '@/lib/calculationsCache';
 import prisma from '@/lib/prisma';
 
 /**
@@ -22,8 +22,8 @@ export async function GET(request: Request) {
             );
         }
 
-        // Re-calculate developer costs for this period
-        const costResults = await calculatePeriodCosts(month, year);
+        // Re-calculate developer costs for this period (cached, 60s TTL)
+        const costResults = await cachedCalculatePeriodCosts(month, year);
 
         // Also try to fetch payroll register data for this period (optional)
         const payrollByDev: Record<string, number> = {};

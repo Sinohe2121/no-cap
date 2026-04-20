@@ -5,6 +5,7 @@ import { handleApiError } from '@/lib/apiError';
 import { computeLoadedCost } from '@/lib/costUtils';
 import prisma from '@/lib/prisma';
 import { CreateProjectSchema, UpdateProjectSchema, formatZodError } from '@/lib/validations';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 
 export async function GET() {
     try {
@@ -13,10 +14,26 @@ export async function GET() {
         // ── Parallelize all independent queries ──
         const [projects, fringeConfig, meetingConfig, developers, payrollImports, allTickets] = await Promise.all([
             prisma.project.findMany({
-                include: {
+                select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    epicKey: true,
+                    status: true,
+                    isCapitalizable: true,
+                    isQRE: true,
+                    amortizationMonths: true,
+                    startingBalance: true,
+                    startingAmortization: true,
+                    startDate: true,
+                    launchDate: true,
+                    overrideReason: true,
+                    mgmtAuthorized: true,
+                    probableToComplete: true,
+                    parentProjectId: true,
                     _count: { select: { tickets: true, journalEntries: true } },
                     tickets: {
-                        select: { storyPoints: true, issueType: true, allocatedAmount: true },
+                        select: { storyPoints: true, issueType: true },
                     },
                     journalEntries: {
                         where: { entryType: 'AMORTIZATION' },
@@ -281,6 +298,10 @@ export async function PUT(request: Request) {
                 ...(isQRE !== undefined && { isQRE }),
             },
         });
+
+        // Project status / capitalizable / amort window all flow into cost
+        // calculations — clear the cache so changes show up on next read.
+        invalidatePeriodCostsCache();
 
         return NextResponse.json(updated);
     } catch (error) {

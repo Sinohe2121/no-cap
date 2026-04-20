@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 import { calculatePeriodCosts, calculateTicketAmortization, calculateAmortization } from '@/lib/calculations';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
+import { classifyTicket, loadClassificationRules } from '@/lib/classification';
 import { ACCOUNTS, PERIOD_STATUSES, ENTRY_TYPES, ISSUE_TYPES } from '@/lib/constants';
 import { UpdatePeriodStatusSchema, GenerateEntriesSchema, formatZodError } from '@/lib/validations';
 
@@ -202,6 +204,10 @@ export async function POST(request: Request) {
         });
         const projectNameMap = new Map(allProjects.map((p) => [p.id, p.name]));
         const projectAmortMap = new Map(allProjects.map((p) => [p.id, p.amortizationMonths]));
+        const projectMap     = new Map(allProjects.map((p) => [p.id, p]));
+
+        // Load classification rules — single source of truth for capitalize vs expense
+        const rules = await loadClassificationRules();
 
         // Pre-fetch ALL "open during period" tickets for audit trails
         const startDate = new Date(year, month - 1, 1);
@@ -275,7 +281,8 @@ export async function POST(request: Request) {
                 if (!proj) continue;
 
                 const tickets = ticketLookup.get(`${projectId}::${result.developerId}`) ?? [];
-                const capTickets = tickets.filter((t) => t.issueType.toUpperCase() === 'STORY');
+                const capProject = projectMap.get(projectId) ?? null;
+                const capTickets = tickets.filter((t) => classifyTicket(rules, t, capProject) === 'CAPITALIZE');
                 const localPoints = capTickets.reduce((s, t) => s + appliedSP(t), 0);
 
                 for (const ticket of capTickets) {
@@ -465,15 +472,22 @@ export async function POST(request: Request) {
         // For each, compute the monthly amortization charge
         let totalAmortization = 0;
 
-        const amortTickets = await prisma.jiraTicket.findMany({
+        const amortTicketsRaw = await prisma.jiraTicket.findMany({
             where: {
                 allocatedAmount: { gt: 0 },
                 resolutionDate: { lt: startDate }, // resolved before this period → amortizing
-                // Bugs are never capitalized → never amortized
-                issueType: { not: 'BUG' },
             },
             include: { project: true },
         });
+
+        // Re-evaluate each capitalized ticket against the CURRENT classification
+        // rules. If the rules now say a previously-capitalized ticket should be
+        // expensed, skip it — don't continue amortizing it as a software asset.
+        // (The historical capitalized cost stays on the books until the period is
+        //  regenerated; this guard prevents the bad data from compounding.)
+        const amortTickets = amortTicketsRaw.filter(t =>
+            classifyTicket(rules, t, t.project) === 'CAPITALIZE'
+        );
 
         // Aggregate monthly amortization by project, and track per-ticket details
         const projectAmortCharges: Record<string, {
@@ -582,6 +596,10 @@ export async function POST(request: Request) {
             where: { id: period.id },
             data: { totalCapitalized, totalExpensed, totalAmortization },
         });
+
+        // Drop the cached calculation for this period so the next read picks
+        // up the freshly written totals instead of the pre-generation snapshot.
+        invalidatePeriodCostsCache(month, year);
 
         // Fetch the newly created entries for the variance comparison
         const newEntries = await prisma.journalEntry.findMany({

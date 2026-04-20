@@ -8,19 +8,48 @@ export async function GET(request: Request) {
         const startParam = searchParams.get('start');
         const endParam = searchParams.get('end');
 
-        const tickets = await prisma.jiraTicket.findMany({
-            include: {
-                assignee: { select: { id: true, name: true, role: true, isActive: true } },
-                project: { select: { id: true, name: true, status: true, epicKey: true, isCapitalizable: true } },
-                auditTrails: { select: { id: true, allocatedAmount: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+        // Fetch tickets with only the fields we render — no audit trail rows
+        // pulled per ticket. The cumulative allocated-amount per ticket is
+        // computed via a single SQL groupBy below, which is dramatically
+        // cheaper than loading every audit row.
+        const [tickets, auditSums] = await Promise.all([
+            prisma.jiraTicket.findMany({
+                select: {
+                    id: true,
+                    ticketId: true,
+                    epicKey: true,
+                    issueType: true,
+                    summary: true,
+                    storyPoints: true,
+                    resolutionDate: true,
+                    fixVersion: true,
+                    allocatedAmount: true,
+                    amortizationMonths: true,
+                    firstCapitalizedDate: true,
+                    customFields: true,
+                    importPeriod: true,
+                    createdAt: true,
+                    assigneeId: true,
+                    assignee: { select: { id: true, name: true, role: true, isActive: true } },
+                    project: { select: { id: true, name: true, status: true, epicKey: true, isCapitalizable: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.auditTrail.groupBy({
+                by: ['jiraTicketId'],
+                _sum: { allocatedAmount: true },
+            }),
+        ]);
+
+        const auditSumByTicket = new Map<string, number>();
+        for (const row of auditSums) {
+            auditSumByTicket.set(row.jiraTicketId, row._sum.allocatedAmount ?? 0);
+        }
 
         const now = new Date();
 
-        let formatted = tickets.map((t: any) => {
-            const allocatedCost = t.auditTrails.reduce((sum: number, a: { allocatedAmount: number }) => sum + a.allocatedAmount, 0);
+        let formatted = tickets.map((t) => {
+            const allocatedCost = auditSumByTicket.get(t.id) ?? 0;
             const capAmount = allocatedCost > 0 ? allocatedCost : t.allocatedAmount;
             const amortMonths = t.amortizationMonths || 36;
 

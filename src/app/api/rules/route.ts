@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 import { ClassificationRulesArraySchema, formatZodError } from '@/lib/validations';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 
 export interface CapRule {
     priority: number;
@@ -67,6 +68,9 @@ export async function PUT(request: Request) {
             },
         });
 
+        // Rules drive cap/expense classification — clear all cached costs.
+        invalidatePeriodCostsCache();
+
         return NextResponse.json(rules);
     } catch (error) {
         return handleApiError(error, 'Failed to save rules');
@@ -85,6 +89,7 @@ export async function DELETE() {
                 label: 'Capitalization Classification Rules',
             },
         });
+        invalidatePeriodCostsCache();
         return NextResponse.json(DEFAULT_RULES);
     } catch (error) {
         console.error('Rules DELETE error:', error);

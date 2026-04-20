@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, Calculator, FileDown, Search, X, DollarSign, TrendingDown, ClipboardList, ChevronDown, ChevronRight, Lock, Unlock, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { BookOpen, Calculator, FileDown, Search, X, DollarSign, TrendingDown, ClipboardList, ChevronDown, ChevronRight, Lock, Unlock, ArrowLeft, AlertTriangle, Hexagon, Square, Octagon, Triangle, Circle, Diamond } from 'lucide-react';
 
 interface Period {
     id: string;
@@ -108,13 +108,13 @@ function formatCurrency(amount: number) {
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-const entryTypeConfig: Record<string, { label: string; bg: string; color: string; icon: string }> = {
-    CAPITALIZATION: { label: 'Capitalization',     bg: '#EBF5EF', color: '#21944E', icon: '💰' },
-    EXPENSE:        { label: 'Expense',             bg: '#FFF5F5', color: '#FA4338', icon: '📝' },
-    EXPENSE_BUG:    { label: 'Expense — Bugs',      bg: '#FFF5F5', color: '#FA4338', icon: '🐛' },
-    EXPENSE_TASK:   { label: 'Expense — Tasks',     bg: '#FFF8EE', color: '#C86420', icon: '📋' },
-    ADJUSTMENT:     { label: 'Overhead Adj.',       bg: '#F5F3FF', color: '#4141A2', icon: '⏱' },
-    AMORTIZATION:   { label: 'Amortization',        bg: '#F0EAF8', color: '#4141A2', icon: '📉' },
+const entryTypeConfig: Record<string, { label: string; bg: string; color: string; icon: any }> = {
+    CAPITALIZATION: { label: 'Capitalization',     bg: '#EBF5EF', color: '#21944E', icon: <Hexagon className="w-3.5 h-3.5" fill="currentColor" /> },
+    EXPENSE:        { label: 'Expense',             bg: '#FFF5F5', color: '#FA4338', icon: <Square className="w-3.5 h-3.5" fill="currentColor" /> },
+    EXPENSE_BUG:    { label: 'Expense — Bugs',      bg: '#FFF5F5', color: '#FA4338', icon: <Octagon className="w-3.5 h-3.5" fill="currentColor" /> },
+    EXPENSE_TASK:   { label: 'Expense — Tasks',     bg: '#FFF8EE', color: '#C86420', icon: <Triangle className="w-3.5 h-3.5" fill="currentColor" /> },
+    ADJUSTMENT:     { label: 'Overhead Adj.',       bg: '#F5F3FF', color: '#4141A2', icon: <Circle className="w-3.5 h-3.5" fill="currentColor" /> },
+    AMORTIZATION:   { label: 'Amortization',        bg: '#F0EAF8', color: '#4141A2', icon: <Diamond className="w-3.5 h-3.5" fill="currentColor" /> },
 };
 
 export default function JournalEntriesPage() {
@@ -130,6 +130,7 @@ export default function JournalEntriesPage() {
     const [payrollAudit, setPayrollAudit] = useState<PayrollAuditData | null>(null);
     const [payrollAuditLoading, setPayrollAuditLoading] = useState(false);
     const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [lockingPeriodId, setLockingPeriodId] = useState<string | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [varianceData, setVarianceData] = useState<VarianceData | null>(null);
@@ -142,6 +143,17 @@ export default function JournalEntriesPage() {
             return next;
         });
     };
+
+    const toggleGroup = (key: string) => {
+        setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const TYPE_ORDER = ['CAPITALIZATION', 'EXPENSE_BUG', 'EXPENSE_TASK', 'EXPENSE', 'ADJUSTMENT', 'AMORTIZATION'];
 
     const togglePeriodStatus = async (period: Period) => {
         const newStatus = period.status === 'OPEN' ? 'CLOSED' : 'OPEN';
@@ -390,7 +402,7 @@ export default function JournalEntriesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                     <div className="border rounded-xl p-4" style={{ background: '#EBF5EF', borderColor: 'rgba(33,148,78,0.2)' }}>
                         <div className="flex items-center gap-2 mb-2">
-                            <DollarSign className="w-4 h-4" style={{ color: '#21944E' }} />
+                            <Hexagon className="w-4 h-4" fill="currentColor" style={{ color: '#21944E' }} />
                             <span className="text-xs font-semibold uppercase" style={{ color: '#21944E' }}>Capitalization</span>
                         </div>
                         <div className="space-y-1.5 text-xs" style={{ color: '#717684' }}>
@@ -400,7 +412,7 @@ export default function JournalEntriesPage() {
                     </div>
                     <div className="border rounded-xl p-4" style={{ background: '#FFF5F5', borderColor: 'rgba(250,67,56,0.2)' }}>
                         <div className="flex items-center gap-2 mb-2">
-                            <TrendingDown className="w-4 h-4" style={{ color: '#FA4338' }} />
+                            <Diamond className="w-4 h-4" fill="currentColor" style={{ color: '#FA4338' }} />
                             <span className="text-xs font-semibold uppercase" style={{ color: '#FA4338' }}>Amortization</span>
                         </div>
                         <div className="space-y-1.5 text-xs" style={{ color: '#717684' }}>
@@ -502,45 +514,98 @@ export default function JournalEntriesPage() {
                                 </div>
                             )}
 
-                            {!collapsedPeriods.has(period.id) && period.journalEntries.length > 0 && (
-                                <div className="rounded-lg overflow-hidden mt-3" style={{ background: '#FFFFFF' }}>
-                                    <table className="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Type</th>
-                                                <th>Debit</th>
-                                                <th>Credit</th>
-                                                <th>Project</th>
-                                                <th className="text-right">Amount</th>
-                                                <th></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {period.journalEntries.map((entry) => (
-                                                <tr key={entry.id}>
-                                                    <td>
-                                                        <span className="badge" style={{
-                                                            background: entry.entryType === 'CAPITALIZATION' ? '#EBF5EF' : entry.entryType === 'AMORTIZATION' ? '#F0EAF8' : '#FFF5F5',
-                                                            color: entry.entryType === 'CAPITALIZATION' ? '#21944E' : entry.entryType === 'AMORTIZATION' ? '#4141A2' : '#FA4338',
-                                                        }}>
-                                                            {entry.entryType}
-                                                        </span>
-                                                    </td>
-                                                    <td className="text-xs">{entry.debitAccount}</td>
-                                                    <td className="text-xs">{entry.creditAccount}</td>
-                                                    <td className="text-xs" style={{ color: '#717684' }}>{entry.project?.name ?? <em>Period Adj.</em>}</td>
-                                                    <td className="text-right font-semibold text-sm" style={{ color: '#3F4450' }}>{formatCurrency(entry.amount)}</td>
-                                                    <td>
-                                                        <button onClick={() => showAudit(entry.id)} className="btn-ghost text-xs">
-                                                            <Search className="w-3 h-3" /> Audit
-                                                        </button>
-                                                    </td>
+                            {!collapsedPeriods.has(period.id) && period.journalEntries.length > 0 && (() => {
+                                // Group entries by type, preserving the canonical accounting order
+                                const groups = new Map<string, JournalEntry[]>();
+                                for (const e of period.journalEntries) {
+                                    if (!groups.has(e.entryType)) groups.set(e.entryType, []);
+                                    groups.get(e.entryType)!.push(e);
+                                }
+                                const orderedTypes = [
+                                    ...TYPE_ORDER.filter(t => groups.has(t)),
+                                    ...Array.from(groups.keys()).filter(t => !TYPE_ORDER.includes(t)),
+                                ];
+                                return (
+                                    <div className="rounded-lg overflow-hidden mt-3" style={{ background: '#FFFFFF' }}>
+                                        <table className="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ width: 32 }}></th>
+                                                    <th>Type</th>
+                                                    <th>Debit</th>
+                                                    <th>Credit</th>
+                                                    <th>Project</th>
+                                                    <th className="text-right">Amount</th>
+                                                    <th></th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
+                                            </thead>
+                                            <tbody>
+                                                {orderedTypes.map((type) => {
+                                                    const entries = groups.get(type)!;
+                                                    const groupKey = `${period.id}::${type}`;
+                                                    const isExpanded = expandedGroups.has(groupKey);
+                                                    const subtotal = entries.reduce((s, e) => s + e.amount, 0);
+                                                    const conf = entryTypeConfig[type] || entryTypeConfig['EXPENSE'];
+                                                    const debitAccts = Array.from(new Set(entries.map(e => e.debitAccount)));
+                                                    const creditAccts = Array.from(new Set(entries.map(e => e.creditAccount)));
+                                                    const debitLabel = debitAccts.length === 1 ? debitAccts[0] : `${debitAccts.length} accounts`;
+                                                    const creditLabel = creditAccts.length === 1 ? creditAccts[0] : `${creditAccts.length} accounts`;
+                                                    return (
+                                                        <Fragment key={groupKey}>
+                                                            <tr
+                                                                onClick={() => toggleGroup(groupKey)}
+                                                                style={{
+                                                                    cursor: 'pointer',
+                                                                    background: isExpanded ? '#F6F6F9' : '#FAFAFC',
+                                                                    borderTop: '1px solid #E2E4E9',
+                                                                }}
+                                                            >
+                                                                <td>
+                                                                    {isExpanded
+                                                                        ? <ChevronDown className="w-4 h-4" style={{ color: '#717684' }} />
+                                                                        : <ChevronRight className="w-4 h-4" style={{ color: '#717684' }} />
+                                                                    }
+                                                                </td>
+                                                                <td>
+                                                                    <span className="badge flex items-center gap-1.5 w-fit" style={{ background: conf.bg, color: conf.color, fontSize: 11, fontWeight: 700 }}>
+                                                                        {conf.icon}
+                                                                        {conf.label}
+                                                                    </span>
+                                                                    <span className="text-[10px] ml-2" style={{ color: '#A4A9B6' }}>
+                                                                        {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="text-xs" style={{ color: '#717684' }}>{debitLabel}</td>
+                                                                <td className="text-xs" style={{ color: '#717684' }}>{creditLabel}</td>
+                                                                <td></td>
+                                                                <td className="text-right font-bold text-sm tabular-nums" style={{ color: conf.color }}>
+                                                                    {formatCurrency(subtotal)}
+                                                                </td>
+                                                                <td></td>
+                                                            </tr>
+                                                            {isExpanded && entries.map((entry) => (
+                                                                <tr key={entry.id} style={{ background: '#FFFFFF' }}>
+                                                                    <td></td>
+                                                                    <td style={{ color: '#A4A9B6', paddingLeft: 16 }}>↳</td>
+                                                                    <td className="text-xs">{entry.debitAccount}</td>
+                                                                    <td className="text-xs">{entry.creditAccount}</td>
+                                                                    <td className="text-xs" style={{ color: '#717684' }}>{entry.project?.name ?? <em>Period Adj.</em>}</td>
+                                                                    <td className="text-right font-semibold text-sm tabular-nums" style={{ color: '#3F4450' }}>{formatCurrency(entry.amount)}</td>
+                                                                    <td>
+                                                                        <button onClick={() => showAudit(entry.id)} className="btn-ghost text-xs">
+                                                                            <Search className="w-3 h-3" /> Audit
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </Fragment>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })()}
 
                             {!collapsedPeriods.has(period.id) && period.journalEntries.length === 0 && (
                                 <p className="text-xs italic mt-3" style={{ color: '#A4A9B6' }}>No journal entries generated for this period</p>
@@ -557,9 +622,11 @@ export default function JournalEntriesPage() {
                         <div className="flex items-start justify-between mb-6">
                             <div>
                                 <div className="flex items-center gap-3 mb-1">
-                                    <span className="text-xl">{typeConf.icon}</span>
+                                                                        <div className="flex text-xl" style={{ color: typeConf.color }}>
+                                        {typeConf.icon}
+                                    </div>
                                     <h2 className="text-lg font-bold" style={{ color: '#3F4450' }}>Audit Trail</h2>
-                                    <span className="badge" style={{ background: typeConf.bg, color: typeConf.color, fontSize: 11 }}>
+                                    <span className="badge flex items-center gap-1.5" style={{ background: typeConf.bg, color: typeConf.color, fontSize: 11 }}>
                                         {typeConf.label}
                                     </span>
                                 </div>

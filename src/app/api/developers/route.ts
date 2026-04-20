@@ -3,6 +3,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { UpdateDeveloperSchema, CreateDeveloperSchema, formatZodError } from '@/lib/validations';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 
 export async function GET(request: NextRequest) {
     try {
@@ -38,13 +39,25 @@ export async function GET(request: NextRequest) {
 
 
         const developers = await prisma.developer.findMany({
-            include: {
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                jiraUserId: true,
+                role: true,
+                isActive: true,
+                fringeBenefitRate: true,
                 tickets: {
                     where: ticketFilter,
                     select: { storyPoints: true, issueType: true, project: { select: { isCapitalizable: true, status: true } } },
                 },
                 payrollEntries: {
-                    include: { payrollImport: { select: { payDate: true, fringeBenefitRate: true } } },
+                    select: {
+                        grossSalary: true,
+                        sbcAmount: true,
+                        payrollImportId: true,
+                        payrollImport: { select: { payDate: true, fringeBenefitRate: true } },
+                    },
                 },
             },
             orderBy: { name: 'asc' },
@@ -152,6 +165,9 @@ export async function PUT(request: Request) {
                 ...(isActive !== undefined && { isActive }),
             },
         });
+
+        // Salary / fringe / SBC / active flag all flow into cost calculations.
+        invalidatePeriodCostsCache();
 
         return NextResponse.json(updated);
     } catch (error) {

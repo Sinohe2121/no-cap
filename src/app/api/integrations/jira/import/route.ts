@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { JiraImportSchema, formatZodError } from '@/lib/validations';
 import { persistTicketCosts } from '@/lib/ticketCostPersist';
 import { normalizeIssueType } from '@/lib/jiraUtils';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 
 export async function POST(request: Request) {
     try {
@@ -122,6 +123,10 @@ export async function POST(request: Request) {
             const persistResult = await persistTicketCosts(importPeriod);
             costsUpdated = persistResult.updated;
         }
+
+        // Ticket data drives cost results — clear the cache so the next read
+        // picks up the freshly imported tickets across any open period.
+        invalidatePeriodCostsCache();
 
         return NextResponse.json({
             message: 'Import successful',

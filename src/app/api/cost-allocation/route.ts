@@ -55,8 +55,30 @@ export async function GET() {
         // ── 4. Load all tickets with project info for distribution ───
         const allTickets = await prisma.jiraTicket.findMany({
             where: { assigneeId: { in: developers.map(d => d.id) } },
-            include: { project: { select: { id: true, name: true } } },
+            select: {
+                assigneeId: true,
+                projectId: true,
+                storyPoints: true,
+                resolutionDate: true,
+                project: { select: { id: true, name: true } },
+            },
         });
+
+        // ── 4a. Pre-bucket tickets by assignee, splitting open vs resolved ──
+        // The previous implementation re-scanned `allTickets` once per
+        // (developer × payroll import) — O(D × I × T). For 50 devs × 12 months
+        // × 5k tickets that's 3M comparisons. We bucket once up front so each
+        // inner-loop lookup is O(devTickets) instead of O(allTickets).
+        type DevTicket = (typeof allTickets)[number];
+        const openByDev = new Map<string, DevTicket[]>();
+        const resolvedByDev = new Map<string, DevTicket[]>();
+        for (const t of allTickets) {
+            if (!t.assigneeId) continue;
+            const target = t.resolutionDate ? resolvedByDev : openByDev;
+            const arr = target.get(t.assigneeId);
+            if (arr) arr.push(t);
+            else target.set(t.assigneeId, [t]);
+        }
 
         // ── 5. Build cost allocation matrix ──────────────────────────
         // Shape: allocationMap[devId][importId] = { salary, fringe, sbc, totalCost, distributions[] }
@@ -100,12 +122,14 @@ export async function GET() {
 
                 // Find tickets "open during period" for this dev in this month
                 // = still open (no resolutionDate) OR resolved during this month
-                const devTickets = allTickets.filter(t => {
-                    if (t.assigneeId !== dev.id) return false;
-                    if (!t.resolutionDate) return true; // still open = being worked on
-                    const rd = new Date(t.resolutionDate);
-                    return rd >= monthStart && rd <= monthEnd; // resolved during this month
-                });
+                const openForDev = openByDev.get(dev.id) ?? [];
+                const resolvedForDev = resolvedByDev.get(dev.id) ?? [];
+                const devTickets: DevTicket[] = [
+                    ...openForDev,
+                    ...resolvedForDev.filter(t =>
+                        t.resolutionDate! >= monthStart && t.resolutionDate! <= monthEnd
+                    ),
+                ];
 
                 const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
 

@@ -98,7 +98,7 @@ export default function DashboardPage() {
             {/* FinTech Header */}
             <div className="flex items-end justify-between mb-6 pb-4 border-b border-[#E2E4E9]/60">
                 <div>
-                    <h1 className="text-[28px] font-black uppercase tracking-tight leading-none mb-1 text-[#3F4450]">Software Capitalization Dashboard</h1>
+                    <h1 className="text-[28px] font-black uppercase tracking-tight leading-none mb-1 text-[#3F4450]">Dashboard - {periodLabel}</h1>
                     <p className="text-[13px] font-semibold text-[#A4A9B6] uppercase tracking-wider">ASC 350-40 Compliance Hub</p>
                 </div>
             </div>

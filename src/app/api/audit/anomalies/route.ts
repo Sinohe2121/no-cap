@@ -17,8 +17,16 @@ export interface Anomaly {
     description: string;
     affectedPeriod?: string;
     affectedProject?: string;
+    affectedProjectId?: string;
     affectedAmount?: number;
     action: string;
+    /** Per-type extra fields used by the inline Fix modal */
+    fix?: {
+        type: 'ASU_GAP';
+        projectId: string;
+        missingMgmtAuth: boolean;
+        missingProbable: boolean;
+    };
 }
 
 export async function GET() {
@@ -77,6 +85,7 @@ export async function GET() {
                         description: `${entry.project.name}'s ${entry.entryType.toLowerCase()} entry of ${fmt(entry.amount)} represents ${Math.round(entry.amount / periodTotal * 100)}% of the total ${periodLabel} activity (${fmt(periodTotal)}). Concentrated allocations may warrant additional review.`,
                         affectedPeriod: periodLabel,
                         affectedProject: entry.project.name,
+                        affectedProjectId: entry.project.id,
                         affectedAmount: entry.amount,
                         action: 'Verify that the developer cost allocation and story point split are accurate for this project.',
                     });
@@ -92,6 +101,7 @@ export async function GET() {
                         description: `${entry.project.name} has a capitalization entry of ${fmt(entry.amount)} in ${periodLabel} with zero linked Jira tickets in the audit trail. This will fail an auditor's substantiation test.`,
                         affectedPeriod: periodLabel,
                         affectedProject: entry.project.name,
+                        affectedProjectId: entry.project.id,
                         affectedAmount: entry.amount,
                         action: 'Run Jira sync to ensure tickets are linked, or void this entry and regenerate the period.',
                     });
@@ -115,6 +125,7 @@ export async function GET() {
                             description: `${entry.project.name} is in DEV status and marked capitalizable, but ${periodLabel} only contains expense entries (${fmt(entry.amount)}). Check whether story tickets were assigned to this project — or if the capitalization rule engine needs adjustment.`,
                             affectedPeriod: periodLabel,
                             affectedProject: entry.project.name,
+                            affectedProjectId: entry.project.id,
                             affectedAmount: entry.amount,
                             action: 'Check classification rules and verify that STORY tickets exist for this project in this period.',
                         });
@@ -167,8 +178,15 @@ export async function GET() {
                     title: `ASU 2025-06 Compliance Gap — ${project.name}`,
                     description: `${project.name} has capitalized ${fmt(totalCap)} in development costs but is missing required ASU 2025-06 criteria: ${missingFlags.join(' and ')}. Under the new standard (effective Dec 15, 2025), these costs may need to be expensed.`,
                     affectedProject: project.name,
+                    affectedProjectId: project.id,
                     affectedAmount: totalCap,
                     action: `Navigate to the project detail page and enable ${missingFlags.join(' and ')} to satisfy ASU 2025-06 requirements.`,
+                    fix: {
+                        type: 'ASU_GAP',
+                        projectId: project.id,
+                        missingMgmtAuth: !proj.mgmtAuthorized,
+                        missingProbable: !proj.probableToComplete,
+                    },
                 });
             }
         }

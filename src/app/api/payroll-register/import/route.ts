@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 import { PayrollRegisterImportSchema, formatZodError } from '@/lib/validations';
+import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 
 export async function POST(request: Request) {
     try {
@@ -70,6 +71,9 @@ export async function POST(request: Request) {
             });
             imported++;
         }
+
+        // Cost results for this month are now stale.
+        invalidatePeriodCostsCache(pd.getMonth() + 1, year);
 
         return NextResponse.json({
             message: `Imported ${imported} entries, skipped ${skipped}`,

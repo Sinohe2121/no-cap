@@ -34,6 +34,8 @@ model Developer {
 
   tickets              JiraTicket[]
   payrollEntries       PayrollEntry[]
+
+  @@index([isActive])
 }
 
 // ─── Payroll Imports (Pay Period Snapshots) ──────────────────
@@ -133,6 +135,8 @@ model JiraTicket {
   @@index([resolutionDate])
   @@index([issueType])
   @@index([allocatedAmount])
+  @@index([assigneeId, resolutionDate])
+  @@index([projectId, resolutionDate])
 }
 
 // ─── Accounting Periods ─────────────────────────────────────────
@@ -173,6 +177,7 @@ model JournalEntry {
   @@index([periodId])
   @@index([projectId])
   @@index([entryType])
+  @@index([entryType, periodId])
 }
 
 // ─── Audit Trail ────────────────────────────────────────────────

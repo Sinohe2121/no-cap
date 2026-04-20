@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { classifyTicket, loadClassificationRules } from '@/lib/classification';
 
 export interface PeriodCostResult {
     developerId: string;
@@ -38,12 +39,13 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
 
     const developers = await prisma.developer.findMany({ where: { isActive: true } });
 
-    const [fringeConfig, standardConfig, meetingConfig, bugSpConfig, otherSpConfig] = await Promise.all([
+    const [fringeConfig, standardConfig, meetingConfig, bugSpConfig, otherSpConfig, rules] = await Promise.all([
         prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
         prisma.globalConfig.findUnique({ where: { key: 'ACCOUNTING_STANDARD' } }),
         prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
         prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
         prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
+        loadClassificationRules(),
     ]);
     const globalFringeRate   = fringeConfig  ? parseFloat(fringeConfig.value)  : 0.25;
     const accountingStandard = standardConfig?.value || 'ASC_350_40';
@@ -176,25 +178,17 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
 
             const proj = ticket.project;
 
-            // ── Capitalization rule based on active accounting standard ────
-            let isCapitalizableTicket = false;
+            // ── Classification: rules table is the single source of truth ────
+            // Edit the rules at /accounting/classification-rules. Standard-specific
+            // gates layer on top — they can only DOWNGRADE a CAPITALIZE to EXPENSE,
+            // never upgrade.
+            let isCapitalizableTicket = classifyTicket(rules, ticket, ticket.project) === 'CAPITALIZE';
 
-            if (accountingStandard === 'ASU_2025_06') {
-                isCapitalizableTicket =
-                    issueType === 'STORY' &&
-                    ticket.project.isCapitalizable &&
-                    ticket.project.status === 'DEV' &&
-                    ((proj as Record<string, unknown>).mgmtAuthorized ?? false) === true &&
-                    ((proj as Record<string, unknown>).probableToComplete ?? false) === true;
-            } else if (accountingStandard === 'IFRS') {
-                isCapitalizableTicket =
-                    ticket.project.isCapitalizable &&
-                    (ticket.project.status === 'DEV' || ticket.project.status === 'LIVE');
-            } else {
-                // ASC 350-40 (default): STORY on a project flagged as capitalizable
-                isCapitalizableTicket =
-                    issueType === 'STORY' &&
-                    ticket.project.isCapitalizable;
+            if (isCapitalizableTicket && accountingStandard === 'ASU_2025_06') {
+                // ASU 2025-06 requires explicit management authorization + probable completion
+                const mgmtAuthorized     = ((proj as Record<string, unknown>).mgmtAuthorized     ?? false) === true;
+                const probableToComplete = ((proj as Record<string, unknown>).probableToComplete ?? false) === true;
+                if (!mgmtAuthorized || !probableToComplete) isCapitalizableTicket = false;
             }
 
             if (isCapitalizableTicket) {

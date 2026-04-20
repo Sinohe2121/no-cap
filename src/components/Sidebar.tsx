@@ -20,8 +20,10 @@ import {
     ChevronDown,
     Check,
     Search,
+    Sparkles,
 } from 'lucide-react';
 import { usePeriod, PeriodPreset } from '@/context/PeriodContext';
+import { useWizard } from '@/context/WizardContext';
 
 function formatDate(d: Date) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -275,6 +277,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     const pathname = usePathname();
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const sidebarWidth = collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+    const { open: openWizard, active: wizardActive } = useWizard();
 
     useEffect(() => {
         fetch('/api/config/logo')
@@ -428,6 +431,44 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         </Link>
                     );
                 })}
+
+                {/* ── Next Period Wizard CTA — sits with the nav, not pinned to the bottom ── */}
+                <div style={{ padding: collapsed ? '12px 2px 0' : '16px 12px 0' }}>
+                    <button
+                        onClick={openWizard}
+                        title={collapsed ? 'Start Next Period' : undefined}
+                        style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: collapsed ? 'center' : 'flex-start',
+                            gap: 8,
+                            background: wizardActive
+                                ? 'linear-gradient(135deg, #FA4338 0%, #E0392E 100%)'
+                                : 'linear-gradient(135deg, #4141A2 0%, #353587 100%)',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: 10,
+                            padding: collapsed ? '10px 0' : '10px 12px',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: '#fff',
+                            boxShadow: wizardActive
+                                ? '0 4px 14px rgba(250,67,56,0.35)'
+                                : '0 4px 14px rgba(65,65,162,0.3)',
+                            transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}
+                    >
+                        <Sparkles style={{ width: 14, height: 14, flexShrink: 0 }} />
+                        {!collapsed && (
+                            <span style={{ flex: 1, textAlign: 'left' }}>
+                                {wizardActive ? 'Resume Wizard' : 'Start Next Period'}
+                            </span>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {/* ── Period Selector ── */}
