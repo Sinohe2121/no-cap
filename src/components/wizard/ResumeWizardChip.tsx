@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { CalendarDays, X } from 'lucide-react';
 import { useWizard, WIZARD_STEPS } from '@/context/WizardContext';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 export default function ResumeWizardChip() {
     const { active, visible, currentStep, period, show, cancel } = useWizard();
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
     if (!active || visible) return null;
 
@@ -12,6 +15,7 @@ export default function ResumeWizardChip() {
     const idx = WIZARD_STEPS.findIndex(s => s.id === currentStep);
 
     return (
+        <>
         <div
             style={{
                 position: 'fixed',
@@ -54,11 +58,7 @@ export default function ResumeWizardChip() {
                 </span>
             </button>
             <button
-                onClick={() => {
-                    if (window.confirm('Cancel the wizard? Your progress in this session will be cleared.')) {
-                        cancel();
-                    }
-                }}
+                onClick={() => setShowCancelConfirm(true)}
                 title="Cancel wizard"
                 style={{
                     width: 26,
@@ -77,5 +77,17 @@ export default function ResumeWizardChip() {
                 <X className="w-3.5 h-3.5" />
             </button>
         </div>
+
+        <ConfirmDialog
+            open={showCancelConfirm}
+            title="Cancel the wizard?"
+            message="Your progress in this session will be cleared. Imports already committed (payroll, Jira tickets, journal entries) will not be undone."
+            confirmLabel="Yes, cancel"
+            cancelLabel="Keep working"
+            danger
+            onConfirm={() => { setShowCancelConfirm(false); cancel(); }}
+            onCancel={() => setShowCancelConfirm(false)}
+        />
+        </>
     );
 }

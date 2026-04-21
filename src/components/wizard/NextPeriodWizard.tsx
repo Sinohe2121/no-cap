@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, X, CalendarDays, FileSpreadsheet, GitPullRequest, BookOpen } from 'lucide-react';
 import { useWizard, WIZARD_STEPS, WizardStep } from '@/context/WizardContext';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import Step1Payroll from './steps/Step1Payroll';
 import Step2Jira from './steps/Step2Jira';
 import Step3Journal from './steps/Step3Journal';
@@ -15,6 +16,7 @@ const STEP_ICONS: Record<WizardStep, React.ComponentType<{ className?: string; s
 
 export default function NextPeriodWizard() {
     const { visible, currentStep, completed, period, close, cancel, goTo } = useWizard();
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
     // Lock body scroll while open
     useEffect(() => {
@@ -78,22 +80,12 @@ export default function NextPeriodWizard() {
                     </p>
 
                     <div style={{ position: 'relative', flex: 1 }}>
-                        {/* Connector line */}
-                        <div
-                            style={{
-                                position: 'absolute',
-                                left: 19,
-                                top: 18,
-                                bottom: 18,
-                                width: 2,
-                                background: 'rgba(255,255,255,0.12)',
-                            }}
-                        />
                         {WIZARD_STEPS.map((s, i) => {
                             const Icon = STEP_ICONS[s.id];
                             const isActive = s.id === currentStep;
                             const isDone = completed.includes(s.id);
                             const isReachable = isDone || isActive || i <= currentIdx;
+                            const isLast = i === WIZARD_STEPS.length - 1;
                             return (
                                 <button
                                     key={s.id}
@@ -115,22 +107,38 @@ export default function NextPeriodWizard() {
                                         transition: 'background 0.15s',
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            width: 38,
-                                            height: 38,
-                                            borderRadius: '50%',
-                                            background: isDone ? '#21944E' : isActive ? '#FA4338' : 'rgba(255,255,255,0.08)',
-                                            border: `2px solid ${isDone ? '#21944E' : isActive ? '#FA4338' : 'rgba(255,255,255,0.18)'}`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: '#fff',
-                                            flexShrink: 0,
-                                            zIndex: 1,
-                                        }}
-                                    >
-                                        {isDone ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                                    {/* Icon + connector segment to next step */}
+                                    <div style={{ position: 'relative', width: 38, flexShrink: 0 }}>
+                                        {!isLast && (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: 18,
+                                                    top: 38,
+                                                    height: 24,
+                                                    width: 2,
+                                                    background: isDone ? '#21944E' : 'rgba(255,255,255,0.12)',
+                                                    transition: 'background 0.15s',
+                                                }}
+                                            />
+                                        )}
+                                        <div
+                                            style={{
+                                                width: 38,
+                                                height: 38,
+                                                borderRadius: '50%',
+                                                background: isDone ? '#21944E' : isActive ? '#FA4338' : 'rgba(255,255,255,0.08)',
+                                                border: `2px solid ${isDone ? '#21944E' : isActive ? '#FA4338' : 'rgba(255,255,255,0.18)'}`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: '#fff',
+                                                position: 'relative',
+                                                zIndex: 1,
+                                            }}
+                                        >
+                                            {isDone ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                                        </div>
                                     </div>
                                     <div style={{ paddingTop: 4 }}>
                                         <p className="text-xs font-semibold" style={{ color: isActive ? '#fff' : isDone ? '#fff' : '#C2C5D0' }}>
@@ -149,11 +157,7 @@ export default function NextPeriodWizard() {
                     </div>
 
                     <button
-                        onClick={() => {
-                            if (window.confirm('Cancel the wizard? Your progress in this session will be cleared.')) {
-                                cancel();
-                            }
-                        }}
+                        onClick={() => setShowCancelConfirm(true)}
                         className="text-[11px] font-medium"
                         style={{
                             color: '#A4A9B6',
@@ -204,6 +208,17 @@ export default function NextPeriodWizard() {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={showCancelConfirm}
+                title="Cancel the wizard?"
+                message="Your progress in this session will be cleared. Imports already committed (payroll, Jira tickets, journal entries) will not be undone."
+                confirmLabel="Yes, cancel"
+                cancelLabel="Keep working"
+                danger
+                onConfirm={() => { setShowCancelConfirm(false); cancel(); }}
+                onCancel={() => setShowCancelConfirm(false)}
+            />
         </div>
     );
 }
