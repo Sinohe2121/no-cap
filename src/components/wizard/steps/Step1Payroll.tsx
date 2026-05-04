@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, Check, AlertCircle, ArrowRight, FileSpreadsheet, Users, DollarSign, RefreshCw } from 'lucide-react';
+import { Upload, Check, AlertCircle, ArrowRight, FileSpreadsheet, Users, DollarSign, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useWizard } from '@/context/WizardContext';
 
 const MONTH_NAMES = [
@@ -14,6 +14,19 @@ interface PayrollPeriodRef {
     label: string;
     payDate: string;
     year: number;
+}
+
+interface AccountingPeriodRef {
+    id: string;
+    month: number; // 1-12
+    year: number;
+    journalEntries: { id: string }[];
+}
+
+interface GapPeriod {
+    month: number;
+    year: number;
+    label: string;
 }
 
 interface ParsedRow {
@@ -71,16 +84,45 @@ function fmtUSD(amount: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 }
 
+function payDateToMonthYear(payDate: string): { month: number; year: number } {
+    const parts = String(payDate).split('T')[0].split('-');
+    return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
+}
+
+/** Return the list of payroll periods that don't yet have generated journal entries. */
+function findGapPeriods(
+    imports: PayrollPeriodRef[],
+    accountingPeriods: AccountingPeriodRef[],
+): GapPeriod[] {
+    const periodsWithEntries = new Set(
+        accountingPeriods
+            .filter(p => Array.isArray(p.journalEntries) && p.journalEntries.length > 0)
+            .map(p => `${p.year}-${p.month}`)
+    );
+    return [...imports]
+        .sort((a, b) => (a.payDate < b.payDate ? -1 : 1))
+        .map(imp => payDateToMonthYear(imp.payDate))
+        .filter(({ month, year }) => !periodsWithEntries.has(`${year}-${month}`))
+        .map(({ month, year }) => ({ month, year, label: `${MONTH_NAMES[month - 1]} ${year}` }));
+}
+
 /**
- * Compute the next month after the most-recent imported payroll period.
- * Returns null if there are no imports yet.
+ * Suggest which period the user should work on next:
+ *   1. If there's a payroll period that already exists but has NO journal
+ *      entries, suggest the earliest such period (catch-up first).
+ *   2. Otherwise, suggest the month after the latest payroll import.
+ *   3. If there are no payroll imports at all, return null.
  */
-function nextPeriodAfter(imports: PayrollPeriodRef[]): { month: number; year: number; label: string } | null {
+function suggestNextPeriod(
+    imports: PayrollPeriodRef[],
+    accountingPeriods: AccountingPeriodRef[],
+): { month: number; year: number; label: string } | null {
+    const gaps = findGapPeriods(imports, accountingPeriods);
+    if (gaps.length > 0) return gaps[0];
+
     if (imports.length === 0) return null;
     const latest = [...imports].sort((a, b) => (a.payDate < b.payDate ? 1 : -1))[0];
-    const parts = String(latest.payDate).split('T')[0].split('-');
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
+    const { month: m, year: y } = payDateToMonthYear(latest.payDate);
     const nextMonth = m === 12 ? 1 : m + 1;
     const nextYear = m === 12 ? y + 1 : y;
     return { month: nextMonth, year: nextYear, label: `${MONTH_NAMES[nextMonth - 1]} ${nextYear}` };
@@ -90,6 +132,7 @@ export default function Step1Payroll() {
     const { period, setPeriod, goTo, markCompleted } = useWizard();
 
     const [imports, setImports] = useState<PayrollPeriodRef[]>([]);
+    const [accountingPeriods, setAccountingPeriods] = useState<AccountingPeriodRef[]>([]);
     const [loadingPeriods, setLoadingPeriods] = useState(true);
     const [csvFile, setCsvFile] = useState<File | null>(null);
     const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -104,16 +147,21 @@ export default function Step1Payroll() {
 
     const fileRef = useRef<HTMLInputElement>(null);
 
-    // Load existing periods, suggest the next one, persist into wizard period
+    // Load payroll imports + accounting periods together. We need both to know
+    // which payroll periods still owe a journal entry generation pass.
     useEffect(() => {
         setLoadingPeriods(true);
-        fetch('/api/payroll-register/periods')
-            .then(r => r.ok ? r.json() : [])
-            .then((data: PayrollPeriodRef[]) => {
-                const arr = Array.isArray(data) ? data : [];
-                setImports(arr);
+        Promise.all([
+            fetch('/api/payroll-register/periods').then(r => r.ok ? r.json() : []),
+            fetch('/api/accounting').then(r => r.ok ? r.json() : []),
+        ])
+            .then(([impData, apData]) => {
+                const importsArr: PayrollPeriodRef[] = Array.isArray(impData) ? impData : [];
+                const apsArr: AccountingPeriodRef[] = Array.isArray(apData) ? apData : [];
+                setImports(importsArr);
+                setAccountingPeriods(apsArr);
                 if (!period) {
-                    const next = nextPeriodAfter(arr) || (() => {
+                    const next = suggestNextPeriod(importsArr, apsArr) || (() => {
                         const now = new Date();
                         return { month: now.getMonth() + 1, year: now.getFullYear(), label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` };
                     })();
@@ -127,6 +175,18 @@ export default function Step1Payroll() {
         if (imports.length === 0) return null;
         return [...imports].sort((a, b) => (a.payDate < b.payDate ? 1 : -1))[0];
     }, [imports]);
+
+    /** Periods with payroll imported but no journal entries generated yet. */
+    const gapPeriods = useMemo(
+        () => findGapPeriods(imports, accountingPeriods),
+        [imports, accountingPeriods],
+    );
+
+    /** True when the suggested period is one of the catch-up gap periods. */
+    const isCatchUp = useMemo(
+        () => !!period && gapPeriods.some(g => g.month === period.month && g.year === period.year),
+        [period, gapPeriods],
+    );
 
     const totals = useMemo(() => {
         let people = 0;
@@ -245,20 +305,60 @@ export default function Step1Payroll() {
 
     return (
         <div className="space-y-6">
+            {/* Gap warning — payroll imported but no journal entries generated */}
+            {gapPeriods.length > 0 && (
+                <div
+                    className="rounded-xl p-4"
+                    style={{ background: '#FFFCEB', border: '1px solid #F5E6A3' }}
+                >
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#D3A236' }} />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold" style={{ color: '#8B6914' }}>
+                                {gapPeriods.length} {gapPeriods.length === 1 ? 'period needs' : 'periods need'} catching up
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: '#5A4A1A' }}>
+                                Payroll has been imported but no journal entries have been generated yet for:{' '}
+                                <strong>{gapPeriods.map(g => g.label).join(', ')}</strong>. The wizard
+                                {isCatchUp
+                                    ? ' will start with the earliest one so you can catch up in order.'
+                                    : ' suggests you finish those before opening a new period.'}
+                            </p>
+                            {!isCatchUp && (
+                                <button
+                                    onClick={() => setPeriod(gapPeriods[0])}
+                                    className="btn-secondary text-xs mt-3"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" /> Catch up on {gapPeriods[0].label}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Period banner */}
-            <div className="rounded-xl p-4" style={{ background: '#F0EAF8', border: '1px solid rgba(65,65,162,0.2)' }}>
+            <div
+                className="rounded-xl p-4"
+                style={{
+                    background: isCatchUp ? '#FFF8E6' : '#F0EAF8',
+                    border: `1px solid ${isCatchUp ? '#F5E6A3' : 'rgba(65,65,162,0.2)'}`,
+                }}
+            >
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#4141A2' }}>
-                            Suggested next pay period
+                        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: isCatchUp ? '#8B6914' : '#4141A2' }}>
+                            {isCatchUp ? 'Catching up on pay period' : 'Suggested next pay period'}
                         </p>
                         <p className="text-xl font-bold mt-0.5" style={{ color: '#3F4450' }}>
                             {period?.label ?? '—'}
                         </p>
                         <p className="text-xs mt-1" style={{ color: '#717684' }}>
-                            {latestImported
-                                ? <>Last imported: <strong style={{ color: '#3F4450' }}>{latestImported.label}</strong>. The next pay period after that is <strong style={{ color: '#4141A2' }}>{period?.label}</strong>.</>
-                                : <>No payroll has been imported yet. Defaulting to the current month.</>}
+                            {isCatchUp
+                                ? <>Payroll for <strong style={{ color: '#3F4450' }}>{period?.label}</strong> is already imported, but no journal entries exist for this period yet. You can re-upload the same CSV (it will overwrite) or skip ahead to Step 2.</>
+                                : latestImported
+                                    ? <>Last imported: <strong style={{ color: '#3F4450' }}>{latestImported.label}</strong>. The next pay period after that is <strong style={{ color: '#4141A2' }}>{period?.label}</strong>.</>
+                                    : <>No payroll has been imported yet. Defaulting to the current month.</>}
                         </p>
                     </div>
                     <button
