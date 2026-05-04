@@ -67,6 +67,9 @@ interface HealthData {
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+const fmtNum = (n: number, decimals = 0) => Number.isInteger(n) ? n.toLocaleString() : parseFloat(n.toFixed(decimals)).toLocaleString();
+const fmtBugs = (n: number) => fmtNum(n, 1);
+const fmtPct = (n: number) => fmtNum(n, 0);
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export default function EngineeringHealthPage() {
@@ -126,12 +129,12 @@ export default function EngineeringHealthPage() {
 
             {/* ── KPI Row ── */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-                <KPI icon={<Code2 className="w-4 h-4" />} label="Total Story Points" value={s.totalStoryPoints.toLocaleString()} color="var(--gem)" />
-                <KPI icon={<Bug className="w-4 h-4" />} label="Bug Ratio" value={`${s.bugRatio}%`} color="var(--envoy-red)" subtitle={`${s.bugStoryPoints} SP on bugs`} />
-                <KPI icon={<TrendingUp className="w-4 h-4" />} label="Cap Ratio" value={`${s.capRatio}%`} color="var(--cilantro)" subtitle={`${s.featureStoryPoints} SP capitalized`} />
-                <KPI icon={<Clock className="w-4 h-4" />} label="Avg Cycle Time" value={`${s.avgCycleTimeDays}d`} color="var(--amber)" subtitle={`Median: ${s.medianCycleTimeDays}d`} />
+                <KPI icon={<Code2 className="w-4 h-4" />} label="Total Story Points" value={fmtNum(s.totalStoryPoints)} color="var(--gem)" />
+                <KPI icon={<Bug className="w-4 h-4" />} label="Bug Ratio" value={`${fmtPct(s.bugRatio)}%`} color="var(--envoy-red)" subtitle={`${fmtBugs(s.bugStoryPoints)} SP on bugs`} />
+                <KPI icon={<TrendingUp className="w-4 h-4" />} label="Cap Ratio" value={`${fmtPct(s.capRatio)}%`} color="var(--cilantro)" subtitle={`${fmtNum(s.featureStoryPoints)} SP capitalized`} />
+                <KPI icon={<Clock className="w-4 h-4" />} label="Avg Cycle Time" value={`${fmtNum(s.avgCycleTimeDays, 1)}d`} color="var(--amber)" subtitle={`Median: ${fmtNum(s.medianCycleTimeDays)}d`} />
                 <KPI icon={<DollarSign className="w-4 h-4" />} label="Bug Cost" value={fmt(s.totalBugCost)} color="var(--envoy-red)" subtitle="Est. dollars on bugs" />
-                <KPI icon={<Users className="w-4 h-4" />} label="Active Devs" value={s.activeDevelopers.toString()} color="var(--gem)" subtitle={`${s.totalTickets} tickets`} />
+                <KPI icon={<Users className="w-4 h-4" />} label="Active Devs" value={s.activeDevelopers.toString()} color="var(--gem)" subtitle={`${fmtNum(s.totalTickets)} tickets`} />
             </div>
 
             {/* ── Row 1: Bug vs Feature + Cycle Time ── */}
@@ -210,7 +213,7 @@ export default function EngineeringHealthPage() {
                                         <Link href={`/developers/${dev.developer.id}`} className="text-sm font-semibold no-underline" style={{ color: '#3F4450' }}>
                                             {dev.developer.name}
                                         </Link>
-                                        <span className="text-[10px] ml-2" style={{ color: '#A4A9B6' }}>{dev.totalPoints} SP</span>
+                                        <span className="text-[10px] ml-2" style={{ color: '#A4A9B6' }}>{fmtNum(dev.totalPoints, 1)} SP</span>
                                     </td>
                                     {topProjects.map(tp => {
                                         const match = dev.projects.find(p => p.projectId === tp.id);
@@ -227,7 +230,7 @@ export default function EngineeringHealthPage() {
                                                         minWidth: 50,
                                                     }}
                                                 >
-                                                    {pct > 0 ? `${pct}%` : '—'}
+                                                    {pct > 0 ? `${fmtPct(pct)}%` : '—'}
                                                 </div>
                                             </td>
                                         );
@@ -242,7 +245,7 @@ export default function EngineeringHealthPage() {
                                                 minWidth: 50,
                                             }}
                                         >
-                                            {dev.bugPoints > 0 ? dev.bugPoints : '—'}
+                                            {dev.bugPoints > 0 ? fmtBugs(dev.bugPoints) : '—'}
                                         </div>
                                     </td>
                                     <td className="text-center" style={{ padding: 3 }}>
@@ -255,7 +258,7 @@ export default function EngineeringHealthPage() {
                                                 minWidth: 50,
                                             }}
                                         >
-                                            {dev.capRatio}%
+                                            {fmtPct(dev.capRatio)}%
                                         </div>
                                     </td>
                                 </tr>

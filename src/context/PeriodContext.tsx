@@ -17,6 +17,7 @@ export interface PeriodState {
     label: string;
     /** The fiscal year start month 1-12 (e.g. 2 = Feb) */
     fyStartMonth: number;
+    periodBounds: { oldestMonth: number; oldestYear: number; newestMonth: number; newestYear: number } | null;
 }
 
 /**
@@ -237,6 +238,7 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
             preset, customStart, customEnd,
             range, label,
             fyStartMonth,
+            periodBounds,
             setPreset, setCustomDates,
             apiParams,
             fyQuarters,

@@ -10,8 +10,36 @@ function formatDate(d: Date) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function getPeriodOptions(bounds: { oldestMonth: number; oldestYear: number; newestMonth: number; newestYear: number } | null) {
+    let startY, startM, endY, endM;
+    if (bounds) {
+        startY = bounds.oldestYear;
+        startM = bounds.oldestMonth;
+        endY = bounds.newestYear;
+        endM = bounds.newestMonth;
+    } else {
+        const now = new Date();
+        endY = now.getFullYear();
+        endM = now.getMonth() + 1;
+        startY = endY - 1;
+        startM = endM;
+    }
+    const options = [];
+    let curY = startY;
+    let curM = startM;
+    while (curY < endY || (curY === endY && curM <= endM)) {
+        options.push({ year: curY, month: curM });
+        curM++;
+        if (curM > 12) {
+            curM = 1;
+            curY++;
+        }
+    }
+    return options.reverse();
+}
+
 export default function PeriodBar() {
-    const { preset, customStart, customEnd, label, range, fyStartMonth, setPreset, setCustomDates } = usePeriod();
+    const { preset, customStart, customEnd, label, range, fyStartMonth, periodBounds, setPreset, setCustomDates } = usePeriod();
     const [open, setOpen] = useState(false);
     const [localStart, setLocalStart] = useState(customStart);
     const [localEnd, setLocalEnd] = useState(customEnd);
@@ -201,25 +229,50 @@ export default function PeriodBar() {
                             <div style={{ padding: '12px 16px', borderTop: '1px solid #E2E4E9', background: '#FAFAFA' }}>
                                 <div style={{ marginBottom: 8 }}>
                                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#717684', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        Start Date
+                                        Start Period
                                     </label>
-                                    <input
-                                        type="date"
-                                        value={localStart}
-                                        onChange={(e) => setLocalStart(e.target.value)}
-                                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #E2E4E9', borderRadius: 6, fontSize: 12, color: '#3F4450', background: '#FFFFFF', outline: 'none' }}
-                                    />
+                                    <select
+                                        value={localStart ? localStart.substring(0, 7) : ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) setLocalStart(`${val}-01`);
+                                            else setLocalStart('');
+                                        }}
+                                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #E2E4E9', borderRadius: 6, fontSize: 12, color: '#3F4450', background: '#FFFFFF', outline: 'none', appearance: 'auto' }}
+                                    >
+                                        <option value="" disabled>Select start period</option>
+                                        {getPeriodOptions(periodBounds).map(opt => {
+                                            const val = `${opt.year}-${String(opt.month).padStart(2, '0')}`;
+                                            const label = `${MONTH_NAMES[opt.month - 1]} ${opt.year}`;
+                                            return <option key={val} value={val}>{label}</option>;
+                                        })}
+                                    </select>
                                 </div>
                                 <div style={{ marginBottom: 12 }}>
                                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#717684', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        End Date
+                                        End Period
                                     </label>
-                                    <input
-                                        type="date"
-                                        value={localEnd}
-                                        onChange={(e) => setLocalEnd(e.target.value)}
-                                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #E2E4E9', borderRadius: 6, fontSize: 12, color: '#3F4450', background: '#FFFFFF', outline: 'none' }}
-                                    />
+                                    <select
+                                        value={localEnd ? localEnd.substring(0, 7) : ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                                const [y, m] = val.split('-');
+                                                const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+                                                setLocalEnd(`${val}-${lastDay}`);
+                                            } else {
+                                                setLocalEnd('');
+                                            }
+                                        }}
+                                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #E2E4E9', borderRadius: 6, fontSize: 12, color: '#3F4450', background: '#FFFFFF', outline: 'none', appearance: 'auto' }}
+                                    >
+                                        <option value="" disabled>Select end period</option>
+                                        {getPeriodOptions(periodBounds).map(opt => {
+                                            const val = `${opt.year}-${String(opt.month).padStart(2, '0')}`;
+                                            const label = `${MONTH_NAMES[opt.month - 1]} ${opt.year}`;
+                                            return <option key={val} value={val}>{label}</option>;
+                                        })}
+                                    </select>
                                 </div>
                                 <button
                                     onClick={handleApplyCustom}
