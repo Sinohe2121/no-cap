@@ -78,7 +78,8 @@ export async function GET(
         });
     } catch (error) {
         console.error('Developer detail error:', error);
-        return NextResponse.json({ error: 'Failed to load developer' }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Failed to load developer';
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

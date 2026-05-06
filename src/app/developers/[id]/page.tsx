@@ -54,6 +54,7 @@ export default function DeveloperDetailPage() {
     const params = useParams();
     const [dev, setDev] = useState<DevDetail | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
@@ -69,9 +70,14 @@ export default function DeveloperDetailPage() {
     });
 
     useEffect(() => {
-        fetch(`/api/developers/${params.id}`)
-            .then((res) => res.ok ? res.json() : null)
-            .then((data) => {
+        (async () => {
+            try {
+                const res = await fetch(`/api/developers/${params.id}`);
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error || `Request failed (${res.status})`);
+                }
+                const data = await res.json();
                 setDev(data);
                 setForm({
                     name: data.name,
@@ -83,8 +89,12 @@ export default function DeveloperDetailPage() {
                     fringeBenefitRate: String((data.fringeBenefitRate * 100).toFixed(1)),
                     isActive: data.isActive,
                 });
-            })
-            .finally(() => setLoading(false));
+            } catch (e) {
+                setLoadError(e instanceof Error ? e.message : 'Failed to load developer');
+            } finally {
+                setLoading(false);
+            }
+        })();
     }, [params.id]);
 
     const handleSave = async () => {
@@ -118,10 +128,24 @@ export default function DeveloperDetailPage() {
         }
     };
 
-    if (loading || !dev) {
+    if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+            </div>
+        );
+    }
+
+    if (!dev) {
+        return (
+            <div>
+                <Link href="/developers" className="btn-ghost mb-6">
+                    <ArrowLeft className="w-4 h-4" /> Back to FTE & Payroll
+                </Link>
+                <div className="glass-card p-6" style={{ border: '1px solid #FA4338' }}>
+                    <h2 className="text-sm font-semibold mb-2" style={{ color: '#FA4338' }}>Failed to load developer</h2>
+                    <p className="text-sm whitespace-pre-wrap font-mono" style={{ color: '#3F4450' }}>{loadError || 'Unknown error'}</p>
+                </div>
             </div>
         );
     }
