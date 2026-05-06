@@ -15,115 +15,151 @@ interface ScheduleRow {
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Fix #25 — corrected formula: monthly charge based on REMAINING net cost
-// (totalCost - startingAmortization), not the full original cost.
-// This matches lib/calculations.ts calculateAmortization and the UI's buildAmortSchedule.
-function buildSchedule(project: {
-    id: string;
-    name: string;
-    epicKey: string;
-    accumulatedCost: number;
-    startingBalance: number;
-    startingAmortization: number;
-    amortizationMonths: number;
-    launchDate: Date | null;
-}): ScheduleRow[] {
-    if (!project.launchDate || project.amortizationMonths <= 0) return [];
-
-    const totalCost = project.accumulatedCost + project.startingBalance;
-    // Remaining depreciable base — don't re-amort what's already been taken
-    const remainingCost = Math.max(0, totalCost - project.startingAmortization);
-    const monthlyAmort = remainingCost / project.amortizationMonths;
-    const today = new Date();
-
-    // Amortization starts the month AFTER launch
-    const amortStart = new Date(project.launchDate.getFullYear(), project.launchDate.getMonth() + 1, 1);
-    const rows: ScheduleRow[] = [];
-    let accumulated = project.startingAmortization;
-
-    for (let i = 0; i < project.amortizationMonths; i++) {
-        const date = new Date(amortStart.getFullYear(), amortStart.getMonth() + i, 1);
-        accumulated += monthlyAmort;
-        const nbv = Math.max(0, totalCost - accumulated);
-        const isPast = date <= today;
-
-        rows.push({
-            month: date.getMonth() + 1,
-            year: date.getFullYear(),
-            label: `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`,
-            amortizationExpense: monthlyAmort,
-            accumulatedAmortization: accumulated,
-            netBookValue: nbv,
-            isProjected: !isPast,
-        });
-    }
-    return rows;
-}
-
+// "Launched" = status DEV or LIVE. Resolution date on each ticket is the
+// asset's start date; the project-level launchDate is not the SoT.
+const LAUNCHED_STATUSES = ['DEV', 'LIVE'] as const;
 
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const projectId = searchParams.get('projectId');
 
-        const where = {
-            isCapitalizable: true,
-            launchDate: { not: null },
-            ...(projectId ? { id: projectId } : {}),
-        };
-
         const projects = await prisma.project.findMany({
-            where,
+            where: {
+                isCapitalizable: true,
+                status: { in: [...LAUNCHED_STATUSES] },
+                ...(projectId ? { id: projectId } : {}),
+            },
             select: {
                 id: true,
                 name: true,
                 epicKey: true,
+                status: true,
+                launchDate: true,
                 accumulatedCost: true,
                 startingBalance: true,
                 startingAmortization: true,
                 amortizationMonths: true,
-                launchDate: true,
-                status: true,
                 amortOverrides: { select: { month: true, year: true, charge: true } },
+                tickets: {
+                    where: {
+                        allocatedAmount: { gt: 0 },
+                        resolutionDate: { not: null },
+                    },
+                    select: {
+                        allocatedAmount: true,
+                        amortizationMonths: true,
+                        resolutionDate: true,
+                    },
+                },
             },
-            orderBy: { launchDate: 'asc' },
+            orderBy: { name: 'asc' },
         });
 
-        const schedules = projects.map((project) => {
-            // Build override lookup
-            const overrideMap = new Map<string, number>();
-            for (const ov of project.amortOverrides) {
-                overrideMap.set(`${ov.year}-${ov.month}`, ov.charge);
-            }
+        const now = new Date();
 
-            const rows = buildSchedule(project);
-            // Merge overrides into rows and recompute running totals
-            if (overrideMap.size > 0) {
-                const totalCost = project.accumulatedCost + project.startingBalance;
-                let accumulated = project.startingAmortization;
-                for (const row of rows) {
-                    const key = `${row.year}-${row.month}`;
-                    if (overrideMap.has(key)) {
-                        row.amortizationExpense = overrideMap.get(key)!;
-                    }
-                    accumulated += row.amortizationExpense;
-                    row.accumulatedAmortization = accumulated;
-                    row.netBookValue = Math.max(0, totalCost - accumulated);
+        const schedules = projects.flatMap((project) => {
+            const tickets = project.tickets.filter(
+                (t) => t.amortizationMonths > 0 && t.resolutionDate
+            );
+
+            // Per-ticket amort: each resolved capitalized ticket starts amortizing
+            // the month after its resolutionDate, straight-line over its useful life.
+            const monthCharges = new Map<string, number>();
+            let costBasis = 0;
+            let earliestStart: Date | null = null;
+            let latestEnd: Date | null = null;
+            let monthlySteadyRate = 0;
+            let maxAmortMonths = 0;
+
+            for (const t of tickets) {
+                const res = new Date(t.resolutionDate!);
+                const start = new Date(res.getFullYear(), res.getMonth() + 1, 1);
+                const monthly = t.allocatedAmount / t.amortizationMonths;
+                costBasis += t.allocatedAmount;
+                monthlySteadyRate += monthly;
+                if (t.amortizationMonths > maxAmortMonths) maxAmortMonths = t.amortizationMonths;
+
+                if (!earliestStart || start < earliestStart) earliestStart = start;
+
+                for (let i = 0; i < t.amortizationMonths; i++) {
+                    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+                    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+                    monthCharges.set(key, (monthCharges.get(key) || 0) + monthly);
+                    if (!latestEnd || d > latestEnd) latestEnd = d;
                 }
             }
 
-            return {
+            // Legacy fallback — only if no resolved tickets exist. Mirrors
+            // src/app/api/projects/[id]/amortization to avoid double-counting
+            // when ticket allocations already cover the legacy basis.
+            const legacyRemaining = Math.max(
+                0,
+                project.startingBalance - project.startingAmortization
+            );
+            if (tickets.length === 0 && legacyRemaining > 0 && project.launchDate && project.amortizationMonths > 0) {
+                const launch = new Date(project.launchDate);
+                const start = new Date(launch.getFullYear(), launch.getMonth() + 1, 1);
+                const monthly = legacyRemaining / project.amortizationMonths;
+                costBasis = project.startingBalance;
+                monthlySteadyRate = monthly;
+                maxAmortMonths = project.amortizationMonths;
+                if (!earliestStart || start < earliestStart) earliestStart = start;
+
+                for (let i = 0; i < project.amortizationMonths; i++) {
+                    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+                    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+                    monthCharges.set(key, (monthCharges.get(key) || 0) + monthly);
+                    if (!latestEnd || d > latestEnd) latestEnd = d;
+                }
+            }
+
+            // Apply admin overrides to forecasted months. Past-period charges
+            // posted as journal entries are already baked into the books; the
+            // override here only affects the schedule's forward projection.
+            for (const ov of project.amortOverrides) {
+                monthCharges.set(`${ov.year}-${ov.month}`, ov.charge);
+            }
+
+            if (!earliestStart || !latestEnd) return [];
+
+            const rows: ScheduleRow[] = [];
+            let accumulated = project.startingAmortization || 0;
+            const cursor = new Date(earliestStart);
+            while (cursor <= latestEnd) {
+                const m = cursor.getMonth() + 1;
+                const y = cursor.getFullYear();
+                const charge = monthCharges.get(`${y}-${m}`) || 0;
+                accumulated += charge;
+                const nbv = Math.max(0, costBasis - accumulated);
+                const isProjected = cursor > now;
+
+                rows.push({
+                    month: m,
+                    year: y,
+                    label: `${MONTH_NAMES[cursor.getMonth()]} ${y}`,
+                    amortizationExpense: charge,
+                    accumulatedAmortization: accumulated,
+                    netBookValue: nbv,
+                    isProjected,
+                });
+
+                cursor.setMonth(cursor.getMonth() + 1);
+            }
+
+            return [{
                 projectId: project.id,
                 projectName: project.name,
                 epicKey: project.epicKey,
                 status: project.status,
-                costBasis: project.accumulatedCost + project.startingBalance,
-                usefulLifeMonths: project.amortizationMonths,
+                ticketCount: tickets.length,
+                costBasis,
+                usefulLifeMonths: maxAmortMonths,
                 launchDate: project.launchDate,
-                monthlyRate: (project.accumulatedCost + project.startingBalance) / project.amortizationMonths,
-                hasOverrides: overrideMap.size > 0,
+                monthlyRate: monthlySteadyRate,
+                hasOverrides: project.amortOverrides.length > 0,
                 rows,
-            };
+            }];
         });
 
         return NextResponse.json({ schedules });

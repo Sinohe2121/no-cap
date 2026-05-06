@@ -44,6 +44,8 @@ interface AmortSchedule {
     projectId: string;
     projectName: string;
     epicKey: string;
+    status: string;
+    ticketCount: number;
     costBasis: number;
     usefulLifeMonths: number;
     launchDate: string | null;
@@ -282,7 +284,7 @@ function AmortScheduleTab() {
         ? (showAll ? selectedSchedule.rows : selectedSchedule.rows.slice(0, 24))
         : [];
 
-    if (schedules.length === 0) return <Empty icon={<Calendar className="w-10 h-10" style={{ color: '#D3D5DB' }} />} text="No LIVE projects with launch dates found" sub="Set a launch date on a project to generate its amortization schedule." />;
+    if (schedules.length === 0) return <Empty icon={<Calendar className="w-10 h-10" style={{ color: '#D3D5DB' }} />} text="No capitalized assets to amortize" sub="Tickets are capitalized when they're resolved on a capitalizable project (status DEV or LIVE). Once that happens, their amortization schedule will appear here." />;
 
     return (
         <div>
@@ -316,6 +318,11 @@ function AmortScheduleTab() {
                         <div className="glass-card p-4">
                             <p className="text-xs mb-1" style={{ color: '#A4A9B6' }}>Useful Life</p>
                             <p className="text-lg font-bold" style={{ color: '#3F4450' }}>{selectedSchedule.usefulLifeMonths} months</p>
+                            {selectedSchedule.ticketCount > 0 && (
+                                <p className="text-xs mt-1" style={{ color: '#A4A9B6' }}>
+                                    {selectedSchedule.ticketCount} capitalized {selectedSchedule.ticketCount === 1 ? 'ticket' : 'tickets'}
+                                </p>
+                            )}
                         </div>
                     </div>
 
