@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
+import { loadCapitalizableStatuses } from '@/lib/classification';
 
 export async function GET(request: Request) {
     try {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
         const periodStart = startParam ? new Date(startParam + 'T00:00:00') : new Date(now.getFullYear(), 0, 1);
 
         // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTickets, accountingPeriods] = await Promise.all([
+        const [projects, fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTickets, accountingPeriods, capitalizableStatuses] = await Promise.all([
             prisma.project.findMany({
                 include: { _count: { select: { tickets: true } } },
             }),
@@ -36,10 +37,12 @@ export async function GET(request: Request) {
                 },
             }),
             prisma.accountingPeriod.findMany(),
+            loadCapitalizableStatuses(),
         ]);
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
         const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+        const eligibleStatusSet = new Set(capitalizableStatuses.map((s) => s.toUpperCase()));
         const bugSpFallback = parseFloat(bugSpConfig?.value ?? '1') || 1;
         const otherSpFallback = parseFloat(otherSpConfig?.value ?? '1') || 1;
         /** Applied SP: use Jira value if > 0, otherwise return the appropriate fallback */
@@ -142,7 +145,9 @@ export async function GET(request: Request) {
                     if (!t.projectId) continue;
                     const pm = projectMap[t.projectId];
                     const isCapex = pm
-                        ? pm.isCapitalizable && t.issueType === 'STORY'
+                        ? pm.isCapitalizable
+                          && t.issueType === 'STORY'
+                          && eligibleStatusSet.has((pm.status || '').toUpperCase())
                         : false;
                     const isBug = t.issueType === 'BUG';
                     // Use composite key so same project can have both CAPEX and OPEX entries

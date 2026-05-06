@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, ArrowLeft, Save, AlertTriangle, X, CalendarDays, Check } from 'lucide-react';
+import { BookOpen, ArrowLeft, Save, AlertTriangle, X, CalendarDays, Check, Layers } from 'lucide-react';
+
+const PROJECT_STATUSES: { key: 'PLANNING' | 'DEV' | 'LIVE' | 'RETIRED'; label: string; description: string }[] = [
+    { key: 'PLANNING', label: 'Planning',  description: 'Pre-feasibility / scoping. R&D-phase work; default expensed.' },
+    { key: 'DEV',      label: 'Dev',       description: 'In active development. Default capitalizable.' },
+    { key: 'LIVE',     label: 'Live',      description: 'Launched & in production. Default capitalizable for incremental enhancements.' },
+    { key: 'RETIRED',  label: 'Retired',   description: 'Decommissioned. Maintenance-only; default expensed.' },
+];
+const DEFAULT_ELIGIBLE_STATUSES = ['DEV', 'LIVE'];
 
 const STANDARDS = [
     {
@@ -76,6 +84,11 @@ export default function AccountingStandardPage() {
     const [fySaving, setFySaving] = useState(false);
     const [fySaved, setFySaved] = useState(false);
 
+    // Capitalizable statuses state
+    const [eligibleStatuses, setEligibleStatuses] = useState<string[]>(DEFAULT_ELIGIBLE_STATUSES);
+    const [statusesSaving, setStatusesSaving] = useState(false);
+    const [statusesSaved, setStatusesSaved] = useState(false);
+
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -87,6 +100,17 @@ export default function AccountingStandardPage() {
 
                 const fy = data.configs.find((c: any) => c.key === 'FISCAL_YEAR_START_MONTH');
                 if (fy) setFyStartMonth(parseInt(fy.value) || 1);
+
+                const cs = data.configs.find((c: any) => c.key === 'CAPITALIZABLE_STATUSES');
+                if (cs) {
+                    try {
+                        const parsed = JSON.parse(cs.value);
+                        if (Array.isArray(parsed)) {
+                            const valid = PROJECT_STATUSES.map((s) => s.key);
+                            setEligibleStatuses(parsed.map(String).filter((s) => valid.includes(s as any)));
+                        }
+                    } catch { /* keep defaults */ }
+                }
 
                 setConfigs(data.configs);
                 const vals: Record<string, string> = {};
@@ -120,6 +144,27 @@ export default function AccountingStandardPage() {
         } else {
             saveConfig(key);
         }
+    };
+
+    const toggleStatus = async (statusKey: string) => {
+        const isOn = eligibleStatuses.includes(statusKey);
+        const next = isOn
+            ? eligibleStatuses.filter((s) => s !== statusKey)
+            : [...eligibleStatuses, statusKey];
+        setEligibleStatuses(next);
+        setStatusesSaving(true); setStatusesSaved(false);
+        await fetch('/api/admin', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'config',
+                key: 'CAPITALIZABLE_STATUSES',
+                value: JSON.stringify(next),
+                label: 'Capitalizable Project Statuses',
+            }),
+        });
+        setStatusesSaving(false); setStatusesSaved(true);
+        setTimeout(() => setStatusesSaved(false), 2500);
     };
 
     const saveStandard = async (value: string) => {
@@ -210,6 +255,62 @@ export default function AccountingStandardPage() {
                         );
                     })}
                 </div>
+            </div>
+
+            <div className="glass-card p-6 mt-8">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: '#EEF2FF' }}>
+                            <Layers className="w-6 h-6" style={{ color: '#4141A2' }} />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-black uppercase tracking-wider" style={{ color: '#3F4450' }}>Capitalization Eligibility by Project Status</h2>
+                            <p className="text-xs font-semibold" style={{ color: '#A4A9B6' }}>Which project statuses are allowed to capitalize. Other statuses are expensed even when treatment is set to CAP.</p>
+                        </div>
+                    </div>
+                    {statusesSaved && <span className="text-xs font-black uppercase" style={{ color: '#21944E' }}>✓ Saved</span>}
+                    {statusesSaving && <span className="text-xs font-bold uppercase" style={{ color: '#A4A9B6' }}>Saving…</span>}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {PROJECT_STATUSES.map((s) => {
+                        const isOn = eligibleStatuses.includes(s.key);
+                        const isDefault = DEFAULT_ELIGIBLE_STATUSES.includes(s.key);
+                        return (
+                            <button
+                                key={s.key}
+                                onClick={() => toggleStatus(s.key)}
+                                className="text-left rounded-xl p-5 transition-all w-full flex flex-col gap-2 hover:shadow-md"
+                                style={{
+                                    background: isOn ? '#EBF5EF' : '#F6F6F9',
+                                    border: `2px solid ${isOn ? '#21944E' : 'transparent'}`,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[14px] font-black uppercase tracking-wider" style={{ color: isOn ? '#21944E' : '#3F4450' }}>{s.label}</span>
+                                    <span
+                                        className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md"
+                                        style={{
+                                            background: isOn ? '#21944E' : '#E2E4E9',
+                                            color: isOn ? '#FFFFFF' : '#717684',
+                                        }}
+                                    >
+                                        {isOn ? 'Capitalize' : 'Expense'}
+                                    </span>
+                                </div>
+                                <p className="text-[12px] font-medium leading-relaxed" style={{ color: '#717684' }}>{s.description}</p>
+                                {isDefault && (
+                                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#A4A9B6' }}>Default: {DEFAULT_ELIGIBLE_STATUSES.includes(s.key) ? 'On' : 'Off'}</span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <p className="text-[11px] font-medium mt-4" style={{ color: '#A4A9B6' }}>
+                    This gate runs after the classification rules and can only DOWNGRADE a CAPITALIZE decision to EXPENSE — it never upgrades. Locked periods are unaffected until they are reopened and regenerated.
+                </p>
             </div>
 
             <div className="glass-card p-6 mt-8">

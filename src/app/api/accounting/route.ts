@@ -5,7 +5,7 @@ import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 import { calculatePeriodCosts, calculateTicketAmortization, calculateAmortization } from '@/lib/calculations';
 import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
-import { classifyTicket, loadClassificationRules } from '@/lib/classification';
+import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } from '@/lib/classification';
 import { ACCOUNTS, PERIOD_STATUSES, ENTRY_TYPES, ISSUE_TYPES } from '@/lib/constants';
 import { UpdatePeriodStatusSchema, GenerateEntriesSchema, formatZodError } from '@/lib/validations';
 
@@ -206,8 +206,11 @@ export async function POST(request: Request) {
         const projectAmortMap = new Map(allProjects.map((p) => [p.id, p.amortizationMonths]));
         const projectMap     = new Map(allProjects.map((p) => [p.id, p]));
 
-        // Load classification rules — single source of truth for capitalize vs expense
-        const rules = await loadClassificationRules();
+        // Load classification rules + status-eligibility set — single source of truth for capitalize vs expense
+        const [rules, capitalizableStatuses] = await Promise.all([
+            loadClassificationRules(),
+            loadCapitalizableStatuses(),
+        ]);
 
         // Pre-fetch ALL "open during period" tickets for audit trails
         const startDate = new Date(year, month - 1, 1);
@@ -282,7 +285,7 @@ export async function POST(request: Request) {
 
                 const tickets = ticketLookup.get(`${projectId}::${result.developerId}`) ?? [];
                 const capProject = projectMap.get(projectId) ?? null;
-                const capTickets = tickets.filter((t) => classifyTicket(rules, t, capProject) === 'CAPITALIZE');
+                const capTickets = tickets.filter((t) => classifyTicket(rules, t, capProject, capitalizableStatuses) === 'CAPITALIZE');
                 const localPoints = capTickets.reduce((s, t) => s + appliedSP(t), 0);
 
                 for (const ticket of capTickets) {
@@ -481,12 +484,19 @@ export async function POST(request: Request) {
         });
 
         // Re-evaluate each capitalized ticket against the CURRENT classification
-        // rules. If the rules now say a previously-capitalized ticket should be
-        // expensed, skip it — don't continue amortizing it as a software asset.
-        // (The historical capitalized cost stays on the books until the period is
-        //  regenerated; this guard prevents the bad data from compounding.)
+        // rules + status-eligibility set. If today's rules say a previously-
+        // capitalized ticket should be expensed, skip it — don't continue
+        // amortizing it as a software asset.
+        // FOLLOW-UP: per the agreed option-(a) policy, an asset that was
+        // capitalized under older rules should keep amortizing on its original
+        // schedule. Implementing that correctly requires a dedicated
+        // CapitalizedAsset table sourced from posted CAPITALIZATION journal
+        // entries, so amortization derives from the ledger rather than from
+        // live JiraTicket.allocatedAmount. Until that lands, this filter
+        // preserves current behavior (and protects against phantom amortization
+        // from `ticketCostPersist`'s unconditional allocatedAmount writes).
         const amortTickets = amortTicketsRaw.filter(t =>
-            classifyTicket(rules, t, t.project) === 'CAPITALIZE'
+            classifyTicket(rules, t, t.project, capitalizableStatuses) === 'CAPITALIZE'
         );
 
         // Aggregate monthly amortization by project, and track per-ticket details
@@ -505,18 +515,21 @@ export async function POST(request: Request) {
                 asOfDate,
             );
 
-            if (amort.monthlyAmortization > 0 && amort.nbv > 0) {
+            // Use currentPeriodCharge — equals monthlyAmortization mid-schedule,
+            // the residual on the final month, 0 before start / after schedule end.
+            // Gating on `nbv > 0` would silently skip the terminal month entry.
+            if (amort.currentPeriodCharge > 0) {
                 const pid = ticket.projectId || 'unknown';
                 if (!projectAmortCharges[pid]) {
                     projectAmortCharges[pid] = { amount: 0, projectName: ticket.project?.name || pid, ticketDetails: [] };
                 }
-                projectAmortCharges[pid].amount += amort.monthlyAmortization;
+                projectAmortCharges[pid].amount += amort.currentPeriodCharge;
                 projectAmortCharges[pid].ticketDetails.push({
                     ticketDbId: ticket.id,
                     ticketId: ticket.ticketId,
-                    monthlyAmort: amort.monthlyAmortization,
+                    monthlyAmort: amort.currentPeriodCharge,
                 });
-                totalAmortization += amort.monthlyAmortization;
+                totalAmortization += amort.currentPeriodCharge;
             }
         }
 
@@ -573,15 +586,15 @@ export async function POST(request: Request) {
                 asOfDate,
             );
 
-            if (amort.monthlyAmortization > 0 && amort.netBookValue > 0) {
-                totalAmortization += amort.monthlyAmortization;
+            if (amort.currentPeriodCharge > 0) {
+                totalAmortization += amort.currentPeriodCharge;
 
                 await prisma.journalEntry.create({
                     data: {
                         entryType: ENTRY_TYPES.AMORTIZATION,
                         debitAccount: ACCOUNTS.AMORTIZATION_EXPENSE,
                         creditAccount: ACCOUNTS.ACCUMULATED_AMORT,
-                        amount: amort.monthlyAmortization,
+                        amount: amort.currentPeriodCharge,
                         description: `Monthly amortization for ${project.name} (legacy asset)`,
                         periodId: period.id,
                         projectId: project.id,

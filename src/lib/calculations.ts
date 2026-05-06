@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { classifyTicket, loadClassificationRules } from '@/lib/classification';
+import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } from '@/lib/classification';
 
 export interface PeriodCostResult {
     developerId: string;
@@ -39,13 +39,14 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
 
     const developers = await prisma.developer.findMany({ where: { isActive: true } });
 
-    const [fringeConfig, standardConfig, meetingConfig, bugSpConfig, otherSpConfig, rules] = await Promise.all([
+    const [fringeConfig, standardConfig, meetingConfig, bugSpConfig, otherSpConfig, rules, capitalizableStatuses] = await Promise.all([
         prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
         prisma.globalConfig.findUnique({ where: { key: 'ACCOUNTING_STANDARD' } }),
         prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
         prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
         prisma.globalConfig.findUnique({ where: { key: 'OTHER_SP_FALLBACK' } }),
         loadClassificationRules(),
+        loadCapitalizableStatuses(),
     ]);
     const globalFringeRate   = fringeConfig  ? parseFloat(fringeConfig.value)  : 0.25;
     const accountingStandard = standardConfig?.value || 'ASC_350_40';
@@ -178,11 +179,12 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
 
             const proj = ticket.project;
 
-            // ── Classification: rules table is the single source of truth ────
-            // Edit the rules at /accounting/classification-rules. Standard-specific
-            // gates layer on top — they can only DOWNGRADE a CAPITALIZE to EXPENSE,
+            // ── Classification: rules table + status-eligibility gate ────────
+            // Edit rules at /accounting/classification-rules. Edit eligible
+            // statuses at /admin/accounting-standard. Standard-specific gates
+            // layer on top — they can only DOWNGRADE a CAPITALIZE to EXPENSE,
             // never upgrade.
-            let isCapitalizableTicket = classifyTicket(rules, ticket, ticket.project) === 'CAPITALIZE';
+            let isCapitalizableTicket = classifyTicket(rules, ticket, ticket.project, capitalizableStatuses) === 'CAPITALIZE';
 
             if (isCapitalizableTicket && accountingStandard === 'ASU_2025_06') {
                 // ASU 2025-06 requires explicit management authorization + probable completion
@@ -271,15 +273,28 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
  * Amortization starts the month AFTER the ticket's resolutionDate.
  * Monthly charge = allocatedAmount / amortizationMonths (straight-line).
  * Continues until net book value reaches $0.
+ *
+ * Return shape:
+ *   - `monthlyAmortization`: the standard monthly charge (constant per asset)
+ *   - `totalAmortization`:   cumulative charge through `asOfDate`
+ *   - `nbv`:                 remaining net book value at end of `asOfDate`'s month
+ *   - `monthsElapsed`:       capped at `amortizationMonths` (1-indexed)
+ *   - `currentPeriodCharge`: amount to POST for `asOfDate`'s month — equals
+ *                            `monthlyAmortization` mid-schedule, the residual
+ *                            on the final month (handles float rounding so
+ *                            totals tie back to `allocatedAmount` exactly),
+ *                            and 0 before amort start or after schedule ends.
+ *                            Callers booking journal entries should use this,
+ *                            not `monthlyAmortization`.
  */
 export function calculateTicketAmortization(
     allocatedAmount: number,
     amortizationMonths: number,
     resolutionDate: Date,
     asOfDate: Date,
-): { monthlyAmortization: number; totalAmortization: number; nbv: number; monthsElapsed: number } {
+): { monthlyAmortization: number; totalAmortization: number; nbv: number; monthsElapsed: number; currentPeriodCharge: number } {
     if (allocatedAmount <= 0 || amortizationMonths <= 0) {
-        return { monthlyAmortization: 0, totalAmortization: 0, nbv: 0, monthsElapsed: 0 };
+        return { monthlyAmortization: 0, totalAmortization: 0, nbv: 0, monthsElapsed: 0, currentPeriodCharge: 0 };
     }
 
     // Amortization starts the first of the month AFTER resolution
@@ -287,27 +302,44 @@ export function calculateTicketAmortization(
 
     // If we haven't reached the amort start date yet, no amortization
     if (asOfDate < amortStart) {
-        return { monthlyAmortization: 0, totalAmortization: 0, nbv: allocatedAmount, monthsElapsed: 0 };
+        return { monthlyAmortization: 0, totalAmortization: 0, nbv: allocatedAmount, monthsElapsed: 0, currentPeriodCharge: 0 };
     }
 
     const monthlyAmortization = allocatedAmount / amortizationMonths;
 
-    // Months elapsed since amortization started (inclusive of asOfDate's month)
-    const monthsElapsed = Math.max(0,
+    // Uncapped position in the schedule (1-indexed; inclusive of asOfDate's month).
+    // Kept uncapped so callers can distinguish "final month — post terminal charge"
+    // from "post-schedule — skip".
+    const uncappedMonthsElapsed = Math.max(0,
         (asOfDate.getFullYear() - amortStart.getFullYear()) * 12 +
         (asOfDate.getMonth() - amortStart.getMonth()) + 1
     );
 
-    const cappedMonths = Math.min(monthsElapsed, amortizationMonths);
+    const cappedMonths = Math.min(uncappedMonthsElapsed, amortizationMonths);
     const totalAmortization = monthlyAmortization * cappedMonths;
     const nbv = Math.max(0, allocatedAmount - totalAmortization);
 
-    return { monthlyAmortization, totalAmortization, nbv, monthsElapsed: cappedMonths };
+    let currentPeriodCharge = 0;
+    if (uncappedMonthsElapsed >= 1 && uncappedMonthsElapsed < amortizationMonths) {
+        currentPeriodCharge = monthlyAmortization;
+    } else if (uncappedMonthsElapsed === amortizationMonths) {
+        // Final month: book the residual so cumulative charges equal allocatedAmount exactly
+        currentPeriodCharge = allocatedAmount - (monthlyAmortization * (amortizationMonths - 1));
+    }
+
+    return { monthlyAmortization, totalAmortization, nbv, monthsElapsed: cappedMonths, currentPeriodCharge };
 }
 
 /**
  * Legacy project-level amortization — kept for backward compatibility with
  * downstream consumers that haven't been migrated yet.
+ *
+ * `currentPeriodCharge` mirrors the ticket-level helper: it's the amount to
+ * POST for `asOfDate`'s month — `monthlyAmortization` mid-schedule, the
+ * residual on the final month, 0 before launch or after schedule ends.
+ * Callers booking journal entries should use this rather than gating on
+ * `monthlyAmortization > 0 && netBookValue > 0` (which silently drops the
+ * terminal entry on month N).
  */
 export function calculateAmortization(
     accumulatedCost: number,
@@ -316,13 +348,14 @@ export function calculateAmortization(
     amortizationMonths: number,
     launchDate: Date | null,
     asOfDate: Date,
-): { monthlyAmortization: number; totalAmortization: number; netBookValue: number; monthsElapsed: number } {
+): { monthlyAmortization: number; totalAmortization: number; netBookValue: number; monthsElapsed: number; currentPeriodCharge: number } {
     if (!launchDate) {
         return {
             monthlyAmortization: 0,
             totalAmortization: startingAmortization,
             netBookValue: accumulatedCost + startingBalance - startingAmortization,
             monthsElapsed: 0,
+            currentPeriodCharge: 0,
         };
     }
 
@@ -331,14 +364,22 @@ export function calculateAmortization(
     const monthlyAmortization = amortizationMonths > 0 ? remainingCost / amortizationMonths : 0;
 
     const amortStart = new Date(launchDate.getFullYear(), launchDate.getMonth() + 1, 1);
-    const monthsElapsed = Math.max(0,
+    const uncappedMonthsElapsed = Math.max(0,
         (asOfDate.getFullYear() - amortStart.getFullYear()) * 12 +
         (asOfDate.getMonth() - amortStart.getMonth()) + 1
     );
 
-    const capMonths = Math.min(monthsElapsed, amortizationMonths);
+    const capMonths = Math.min(uncappedMonthsElapsed, amortizationMonths);
     const totalAmortization = startingAmortization + (monthlyAmortization * capMonths);
     const netBookValue = Math.max(0, totalCost - totalAmortization);
 
-    return { monthlyAmortization, totalAmortization, netBookValue, monthsElapsed: capMonths };
+    let currentPeriodCharge = 0;
+    if (uncappedMonthsElapsed >= 1 && uncappedMonthsElapsed < amortizationMonths) {
+        currentPeriodCharge = monthlyAmortization;
+    } else if (uncappedMonthsElapsed === amortizationMonths) {
+        // Final month: residual against the remaining-cost basis to handle rounding
+        currentPeriodCharge = remainingCost - (monthlyAmortization * (amortizationMonths - 1));
+    }
+
+    return { monthlyAmortization, totalAmortization, netBookValue, monthsElapsed: capMonths, currentPeriodCharge };
 }
