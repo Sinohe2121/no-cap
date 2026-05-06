@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { classifyTicket, loadClassificationRules } from '@/lib/classification';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -39,14 +40,14 @@ export async function GET(request: Request) {
             where: { payDate: { gte: periodStart, lte: periodEnd } },
             select: { label: true },
         });
-        const periodLabels = payrollImports.length > 0
-            ? payrollImports.map((imp) => imp.label)
-            : [`${MONTH_NAMES[month - 1]} ${year}`];
+        const periodLabel = payrollImports.length > 0
+            ? payrollImports[0].label
+            : `${MONTH_NAMES[month - 1]} ${year}`;
 
-        // Tickets explicitly imported for this period.
+        // Tickets active in this period (includes carry-forwards).
         const tickets = await prisma.jiraTicket.findMany({
             where: {
-                importPeriod: { in: periodLabels },
+                ...activeInPeriodWhere(periodLabel),
                 projectId: { not: null },
             },
             select: {

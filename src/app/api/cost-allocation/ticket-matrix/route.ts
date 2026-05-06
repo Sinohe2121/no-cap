@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 export async function GET() {
     try {
@@ -67,11 +68,12 @@ export async function GET() {
                 };
             }).sort((a, b) => a.name.localeCompare(b.name));
 
-            // Find tickets explicitly imported for this payroll period. No
-            // rollforward: open tickets are included when that later period's
-            // Jira import assigns them to its importPeriod.
+            // Find tickets active in this period: imported on or before the
+            // period AND not resolved before it started. Includes brand-new
+            // tickets first imported here AND carry-forwards from earlier
+            // periods that are still open or just closed during this one.
             const periodLabel = imp.label;
-            const periodTickets = allTickets.filter((t) => t.importPeriod === periodLabel);
+            const periodTickets = allTickets.filter((t) => isTicketActiveInPeriod(t, periodLabel));
 
             // Build developer lookup & compute total Applied SP per developer
             const devMap = new Map(developers.map((d) => [d.id, d]));
@@ -106,6 +108,10 @@ export async function GET() {
                     storyPoints: t.storyPoints,
                     appliedSP: appliedSP(t),
                     resolutionDate: t.resolutionDate,
+                    importPeriod: t.importPeriod,
+                    // True iff this ticket was first seen in an earlier period
+                    // and is appearing here as a carry-forward.
+                    isCarryForward: !!t.importPeriod && t.importPeriod !== periodLabel,
                     allocations,
                 };
             });

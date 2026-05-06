@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { periodLabelsThrough } from '@/lib/periodTickets';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
@@ -34,9 +35,21 @@ export async function GET(request: NextRequest) {
                 cursor.setMonth(cursor.getMonth() + 1);
             }
 
-            // Fetch tickets for all months in the range
+            // Tickets active anywhere in the range:
+            //   importPeriod ≤ last month in range (i.e. imported by then)
+            //   AND not resolved before the first month started.
+            // Carry-forwards from earlier months that are still open or
+            // closed during the range stay included.
+            const lastMonthDate = new Date(endStr + 'T00:00:00');
+            const labelsThroughEnd = periodLabelsThrough(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1);
             const tickets = await db.jiraTicket.findMany({
-                where: { importPeriod: { in: importPeriodLabels } },
+                where: {
+                    importPeriod: { in: labelsThroughEnd },
+                    OR: [
+                        { resolutionDate: null },
+                        { resolutionDate: { gte: start } },
+                    ],
+                },
                 include: {
                     project: { select: { id: true, name: true, isCapitalizable: true, status: true } },
                     assignee: { select: { id: true, name: true } },

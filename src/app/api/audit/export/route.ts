@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { calculateAmortization, calculateTicketAmortization } from '@/lib/calculations';
 import { loadClassificationRules, classifyTicket } from '@/lib/classification';
 import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,16 +91,14 @@ export async function GET(request: Request) {
             orderBy: { payDate: 'asc' },
         });
 
-        const periodLabels = payrollImports.length > 0
-            ? payrollImports.map((imp) => imp.label)
-            : [monthLabel];
+        const periodLabel = payrollImports.length > 0
+            ? payrollImports[0].label
+            : monthLabel;
 
-        // ── 3. Tickets imported during period ───────────────────────────────
+        // ── 3. Tickets active during period (includes carry-forwards) ────────
 
         const ticketsWorked = await prisma.jiraTicket.findMany({
-            where: {
-                importPeriod: { in: periodLabels },
-            },
+            where: activeInPeriodWhere(periodLabel),
             include: {
                 project: { select: { id: true, name: true, isCapitalizable: true, status: true, epicKey: true } },
             },

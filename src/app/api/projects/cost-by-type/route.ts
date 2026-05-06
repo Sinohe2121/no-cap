@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 /**
  * Returns monthly cost breakdown by ticket type (Story, Bug, Task, Epic, Subtask).
@@ -101,13 +102,17 @@ export async function GET(request: Request) {
             monthlyByType[monthKey] = { Story: 0, Bug: 0, Task: 0, Epic: 0, Subtask: 0, Capex: 0 };
 
             const salaryLookup = monthlySalary[monthKey] || latestSalaryByDev;
-            const periodLabels = new Set(labelsByMonth[monthKey] || []);
+            const periodLabels = labelsByMonth[monthKey] || [];
 
-            // Group tickets explicitly imported for this month by developer.
+            // Group tickets active in this month by developer (active = imported
+            // by this month AND not resolved before it started; carry-forwards
+            // from earlier months stay in scope until they actually close).
             const ticketsByDevInMonth: Record<string, typeof allTicketsRaw> = {};
             for (const t of allTicketsRaw) {
                 if (!t.assigneeId) continue;
-                if (!t.importPeriod || !periodLabels.has(t.importPeriod)) continue;
+                if (!t.importPeriod) continue;
+                const isActive = periodLabels.some((label: string) => isTicketActiveInPeriod(t, label));
+                if (!isActive) continue;
                 if (!ticketsByDevInMonth[t.assigneeId]) ticketsByDevInMonth[t.assigneeId] = [];
                 ticketsByDevInMonth[t.assigneeId].push(t);
             }

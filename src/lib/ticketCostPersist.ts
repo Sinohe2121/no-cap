@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 /**
  * Compute and persist per-ticket cost allocations to JiraTicket.allocatedAmount.
@@ -7,9 +8,12 @@ import prisma from '@/lib/prisma';
  *   netCost = (grossSalary + fringe + SBC) × (1 − meetingRate)
  *   ticketCost = netCost × appliedSP(ticket) / devTotalAppliedSP
  *
- * Ticket scope: tickets explicitly imported for the payroll period. Open
- * tickets are not rolled forward; a later Jira import must assign them to the
- * later period before they participate in that period's allocation.
+ * Ticket scope: tickets explicitly imported for the payroll period — i.e.
+ * tickets whose importPeriod equals this period's label. The Jira import for
+ * this period captures both tickets resolved during the period and tickets
+ * still open at period end, so this snapshot covers the full universe of
+ * tickets developers worked on. A later period's import will re-capture any
+ * tickets that remain open and re-assign their importPeriod accordingly.
  *
  * Applied SP uses BUG_SP_FALLBACK / OTHER_SP_FALLBACK for tickets with 0 Jira SP.
  *
@@ -55,12 +59,15 @@ export async function persistTicketCosts(importPeriodLabel: string): Promise<{ u
     const periodFringeRate: number = (payrollImport as any).fringeBenefitRate ?? globalFringeRate;
     const meetingRate: number = (payrollImport as any).meetingTimeRate ?? globalMeetingRate;
 
-    // ── Load tickets imported for this period ──────────────────────────
+    // ── Load tickets active in this period ─────────────────────────────
+    // "Active" = imported on or before this period AND not resolved before
+    // this period started. Captures both new-this-period tickets and
+    // carry-forwards from earlier periods that are still open or just closed.
     const devIds = payrollImport.entries.map(e => e.developerId);
     const tickets = await prisma.jiraTicket.findMany({
         where: {
             assigneeId: { in: devIds },
-            importPeriod: importPeriodLabel,
+            ...activeInPeriodWhere(importPeriodLabel),
         },
         select: { id: true, assigneeId: true, storyPoints: true, issueType: true },
     });

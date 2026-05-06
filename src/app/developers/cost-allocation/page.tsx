@@ -31,6 +31,8 @@ interface TicketRow {
     storyPoints: number;
     appliedSP: number;
     resolutionDate: string | null;
+    importPeriod: string | null;
+    isCarryForward: boolean;
     allocations: Record<string, TicketAllocation>;
 }
 
@@ -301,7 +303,18 @@ export default function CostAllocationPage() {
                                                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                                                     >
                                                         <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap" style={{ background: '#FFFFFF' }}>
-                                                            <JiraTicketLink ticketId={ticket.ticketId} style={{ color: '#4141A2', fontWeight: 500 }} />
+                                                            <div className="flex items-center gap-1.5">
+                                                                <JiraTicketLink ticketId={ticket.ticketId} style={{ color: '#4141A2', fontWeight: 500 }} />
+                                                                {ticket.isCarryForward && (
+                                                                    <span
+                                                                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap"
+                                                                        style={{ background: '#F0F0FA', color: '#4141A2' }}
+                                                                        title={`Carry-forward — first imported ${ticket.importPeriod}`}
+                                                                    >
+                                                                        ↻ {ticket.importPeriod}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td className="px-3 py-2 truncate max-w-[160px]" style={{ color: '#3F4450' }} title={ticket.projectName}>
                                                             <span className="font-medium">{ticket.projectName}</span>
