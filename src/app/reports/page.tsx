@@ -100,6 +100,66 @@ function projectStatusBadge(s: string) {
     return map[s] || '#A4A9B6';
 }
 
+// Sum multiple per-project schedules into one combined view. Rows align by
+// (year, month); accumulated amort and NBV are recomputed from the summed
+// monthly expense so the running totals tie back to the combined cost basis.
+function aggregateSchedules(schedules: AmortSchedule[]): AmortSchedule | undefined {
+    if (schedules.length === 0) return undefined;
+    if (schedules.length === 1) return schedules[0];
+
+    const costBasis = schedules.reduce((s, x) => s + x.costBasis, 0);
+    const monthlyRate = schedules.reduce((s, x) => s + x.monthlyRate, 0);
+    const ticketCount = schedules.reduce((s, x) => s + x.ticketCount, 0);
+    const usefulLifeMonths = Math.max(...schedules.map((x) => x.usefulLifeMonths));
+
+    const byKey = new Map<string, { month: number; year: number; label: string; expense: number; isProjected: boolean }>();
+    for (const sched of schedules) {
+        for (const row of sched.rows) {
+            const key = `${row.year}-${row.month}`;
+            const existing = byKey.get(key);
+            if (existing) {
+                existing.expense += row.amortizationExpense;
+            } else {
+                byKey.set(key, {
+                    month: row.month,
+                    year: row.year,
+                    label: row.label,
+                    expense: row.amortizationExpense,
+                    isProjected: row.isProjected,
+                });
+            }
+        }
+    }
+
+    const sorted = [...byKey.values()].sort((a, b) => a.year - b.year || a.month - b.month);
+    let accumulated = 0;
+    const rows: AmortRow[] = sorted.map((r) => {
+        accumulated += r.expense;
+        return {
+            month: r.month,
+            year: r.year,
+            label: r.label,
+            amortizationExpense: r.expense,
+            accumulatedAmortization: accumulated,
+            netBookValue: Math.max(0, costBasis - accumulated),
+            isProjected: r.isProjected,
+        };
+    });
+
+    return {
+        projectId: 'all',
+        projectName: 'All Projects',
+        epicKey: '',
+        status: '',
+        ticketCount,
+        costBasis,
+        usefulLifeMonths,
+        launchDate: null,
+        monthlyRate,
+        rows,
+    };
+}
+
 function downloadCsv(rows: AmortRow[], projectName: string) {
     const header = ['Month', 'Year', 'Amortization Expense', 'Accumulated Amortization', 'Net Book Value', 'Projected?'];
     const lines = rows.map((r) => [
@@ -270,7 +330,7 @@ function AmortScheduleTab() {
     if (loading) return <Spinner />;
 
     const visible = selProject === 'all' ? schedules : schedules.filter((s) => s.projectId === selProject);
-    const selectedSchedule = visible[0];
+    const selectedSchedule = aggregateSchedules(visible);
 
     // Build chart data: annual totals
     const annualChart: Record<number, number> = {};
