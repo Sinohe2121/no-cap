@@ -202,7 +202,13 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                                         </td>
                                         <td>
                                             <span className="text-xs" style={{ color: asset.fullyAmortized ? '#A4A9B6' : '#3F4450' }}>
-                                                {asset.fullyAmortized ? 'Fully amortized' : asset.monthsRemaining !== null ? `${asset.monthsRemaining} mo` : 'Pre-launch'}
+                                                {asset.fullyAmortized
+                                                    ? 'Fully amortized'
+                                                    : asset.monthsRemaining !== null
+                                                        ? `${asset.monthsRemaining} mo`
+                                                        : asset.accumulatedAmortization > 0
+                                                            ? 'Amortizing'
+                                                            : 'Pre-launch'}
                                             </span>
                                         </td>
                                         <td>
