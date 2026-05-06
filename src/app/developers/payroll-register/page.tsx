@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, FileSpreadsheet, Upload, X, Check, AlertCircle, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
+import { formatPeriodLabel } from '@/lib/periodLabel';
 
 interface Developer {
     id: string;
@@ -137,7 +138,7 @@ export default function PayrollRegisterPage() {
     const confirmPeriod = () => {
         if (pickerMonth === '') return;
         const monthIdx = Number(pickerMonth);
-        const label = `${MONTH_NAMES[monthIdx]} ${pickerYear}`;
+        const label = formatPeriodLabel(monthIdx + 1, pickerYear);
         const lastDay = new Date(pickerYear, monthIdx + 1, 0);
         const payDate = lastDay.toISOString().split('T')[0];
         setSelectedPeriod({ label, payDate });

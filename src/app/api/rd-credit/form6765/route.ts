@@ -83,17 +83,8 @@ export async function GET(request: Request) {
             const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
             const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
 
-            // Determine date window for this period
-            const pd = new Date(imp.payDate);
-            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-
-            // Tickets in this period
-            const periodTickets = allTickets.filter((t) => {
-                if (t.importPeriod === imp.label) return true;
-                const rd = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
-                return rd >= monthStart && rd <= monthEnd;
-            });
+            // Tickets explicitly imported for this period.
+            const periodTickets = allTickets.filter((t) => t.importPeriod === imp.label);
 
             // Total and QRE story points per developer
             const devTotalSP: Record<string, number> = {};
@@ -149,15 +140,7 @@ export async function GET(request: Request) {
             const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
             const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
 
-            const pd = new Date(imp.payDate);
-            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-
-            const periodTickets = allTickets.filter((t) => {
-                if (t.importPeriod === imp.label) return true;
-                const rd = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
-                return rd >= monthStart && rd <= monthEnd;
-            });
+            const periodTickets = allTickets.filter((t) => t.importPeriod === imp.label);
 
             // Per developer: SP split by project
             const devTotalSPMap: Record<string, number> = {};

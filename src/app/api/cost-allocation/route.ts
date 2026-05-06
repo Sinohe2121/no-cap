@@ -60,24 +60,24 @@ export async function GET() {
                 projectId: true,
                 storyPoints: true,
                 resolutionDate: true,
+                importPeriod: true,
                 project: { select: { id: true, name: true } },
             },
         });
 
-        // ── 4a. Pre-bucket tickets by assignee, splitting open vs resolved ──
+        // ── 4a. Pre-bucket tickets by import period + assignee ───────────
         // The previous implementation re-scanned `allTickets` once per
         // (developer × payroll import) — O(D × I × T). For 50 devs × 12 months
         // × 5k tickets that's 3M comparisons. We bucket once up front so each
         // inner-loop lookup is O(devTickets) instead of O(allTickets).
         type DevTicket = (typeof allTickets)[number];
-        const openByDev = new Map<string, DevTicket[]>();
-        const resolvedByDev = new Map<string, DevTicket[]>();
+        const ticketsByPeriodDev = new Map<string, DevTicket[]>();
         for (const t of allTickets) {
-            if (!t.assigneeId) continue;
-            const target = t.resolutionDate ? resolvedByDev : openByDev;
-            const arr = target.get(t.assigneeId);
+            if (!t.assigneeId || !t.importPeriod) continue;
+            const key = `${t.importPeriod}::${t.assigneeId}`;
+            const arr = ticketsByPeriodDev.get(key);
             if (arr) arr.push(t);
-            else target.set(t.assigneeId, [t]);
+            else ticketsByPeriodDev.set(key, [t]);
         }
 
         // ── 5. Build cost allocation matrix ──────────────────────────
@@ -108,11 +108,6 @@ export async function GET() {
                 salaryByDev[entry.developerId] = entry.grossSalary;
             }
 
-            // Determine month window for ticket distribution
-            const pd = new Date(imp.payDate);
-            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-
             for (const dev of developers) {
                 const salary = salaryByDev[dev.id] || 0;
                 const fringeRate = dev.fringeBenefitRate || globalFringeRate;
@@ -120,16 +115,8 @@ export async function GET() {
                 const sbc = dev.stockCompAllocation;
                 const totalCost = computeLoadedCost(salary, fringeRate, sbc);
 
-                // Find tickets "open during period" for this dev in this month
-                // = still open (no resolutionDate) OR resolved during this month
-                const openForDev = openByDev.get(dev.id) ?? [];
-                const resolvedForDev = resolvedByDev.get(dev.id) ?? [];
-                const devTickets: DevTicket[] = [
-                    ...openForDev,
-                    ...resolvedForDev.filter(t =>
-                        t.resolutionDate! >= monthStart && t.resolutionDate! <= monthEnd
-                    ),
-                ];
+                // Tickets must be explicitly imported for this payroll period.
+                const devTickets = ticketsByPeriodDev.get(`${imp.label}::${dev.id}`) ?? [];
 
                 const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
 

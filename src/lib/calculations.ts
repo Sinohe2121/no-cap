@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } from '@/lib/classification';
+import { formatPeriodLabel } from '@/lib/periodLabel';
 
 export interface PeriodCostResult {
     developerId: string;
@@ -27,11 +28,9 @@ export interface PeriodCostResult {
 }
 
 /**
- * Ticket selection: "open during the period"
- *   1. Tickets with NO resolutionDate (still open — developer is actively working)
- *   2. Tickets resolved DURING the period (was open at period start, closed during the month)
- *
- * Tickets closed BEFORE the period are excluded — they're no longer being worked on.
+ * Ticket selection: tickets explicitly imported for this payroll period.
+ * Tickets do not roll forward by open/resolved date; a later Jira import must
+ * assign them to the later importPeriod before they participate in that period.
  */
 export async function calculatePeriodCosts(month: number, year: number): Promise<PeriodCostResult[]> {
     const startDate = new Date(year, month - 1, 1);
@@ -76,16 +75,16 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
         }
     }
 
-    // ─── NEW TICKET SELECTION ───────────────────────────────────────
-    // "Open during the period" = still open OR resolved during this month
-    // Excludes tickets resolved BEFORE the period (no longer being worked on)
+    const periodLabels = payrollImports.length > 0
+        ? payrollImports.map((imp) => imp.label)
+        : [formatPeriodLabel(month, year)];
+
+    // ─── TICKET SELECTION ───────────────────────────────────────────
+    // Tickets must be explicitly imported for this period.
     const allTickets = await prisma.jiraTicket.findMany({
         where: {
             assigneeId: { in: developers.map((d) => d.id) },
-            OR: [
-                { resolutionDate: null },                                          // still open
-                { resolutionDate: { gte: startDate, lte: endDate } },             // closed during period
-            ],
+            importPeriod: { in: periodLabels },
         },
         include: { project: true },
     });

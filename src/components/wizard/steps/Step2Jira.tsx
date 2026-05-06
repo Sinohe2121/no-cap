@@ -204,8 +204,8 @@ export default function Step2Jira() {
                     stages={[
                         { at: 0,  label: 'Authenticating with Jira and loading custom-field config…' },
                         { at: 4,  label: `Querying tickets resolved between ${startDate} and ${endDate}…` },
-                        { at: 14, label: `Querying tickets that were still open at the end of ${period.label}…` },
-                        { at: 28, label: 'Paginating through results (Jira returns 100 issues per page)…' },
+                        { at: 14, label: 'Paginating through resolved Jira issues (100 per page)…' },
+                        { at: 28, label: 'Collecting the period import snapshot…' },
                         { at: 45, label: rosterOnly ? 'Matching assignees against the payroll roster…' : 'Matching assignees to your developer list…' },
                         { at: 60, label: 'Building preview rows and applying classification rules…' },
                         { at: 80, label: 'Almost there — finalizing the preview…' },
@@ -222,7 +222,7 @@ export default function Step2Jira() {
                         </h4>
                         <div className="rounded-xl p-4 text-xs space-y-1.5" style={{ background: '#FFFCEB', border: '1px solid #F5E6A3', color: '#5A4A1A' }}>
                             <p>• <strong>Resolved tickets:</strong> all tickets resolved between {MONTH_NAMES[period.month - 1]} 1 and {MONTH_NAMES[period.month - 1]} {lastDay}, {period.year}.</p>
-                            <p>• <strong>Open tickets:</strong> still open at {MONTH_NAMES[period.month - 1]} {lastDay}, {period.year} — i.e. not resolved before {MONTH_NAMES[period.month - 1]} 1 and not closed during the period.</p>
+                            <p>• <strong>No rollforward:</strong> unresolved tickets wait for the period import in which they are resolved.</p>
                             <p>• <strong>Roster filter:</strong> when on, only tickets assigned to developers with payroll &gt; $1 for {period.label}.</p>
                             <p>• <strong>BUG tickets:</strong> always expensed, never capitalized — regardless of project status.</p>
                             <p>• <strong>Depreciation:</strong> capitalized work begins amortizing in <strong>{depreciationStart}</strong>.</p>
@@ -558,8 +558,8 @@ export default function Step2Jira() {
                         <button onClick={() => setPhase('preview')} className="btn-ghost">
                             <ArrowLeft className="w-4 h-4" /> Back
                         </button>
-                        <button onClick={() => goTo('journal')} className="btn-primary">
-                            Continue to Journal Entry <ArrowRight className="w-4 h-4" />
+                        <button onClick={() => goTo('projects')} className="btn-primary">
+                            Continue to Project Review <ArrowRight className="w-4 h-4" />
                         </button>
                     </div>
                 </>

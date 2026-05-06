@@ -86,15 +86,11 @@ export async function POST(request: Request) {
         endAux.setDate(endAux.getDate() + 1);
         const endJql = formatForJql(endAux);
 
-        // Two queries:
-        //   1. Resolved-in-period: resolved date falls within [start, end]
-        //   2. Open-as-of-period-end: ticket existed before period end AND
-        //      was NOT resolved before the period ended
-        //      (resolution is EMPTY = still open today; OR resolved >= endJql means
-        //       resolved on/after the day after period end, so it was open during the period)
+        // Period imports should be explicit snapshots of work completed in
+        // that period. Do not roll open tickets forward; they will be picked
+        // up by the period import in which they are resolved.
         const jqlResolved = `resolved >= "${startJql}" AND resolved < "${endJql}" ORDER BY created DESC`;
-        const jqlOpen = `(resolution is EMPTY OR resolved >= "${endJql}") AND created < "${endJql}" ORDER BY created DESC`;
-        const jqlQueries = [jqlResolved, jqlOpen];
+        const jqlQueries = [jqlResolved];
 
         // ── Parse custom fields config ─────────────────────────────────────────
         let extraFields: { id: string; name: string }[] = [];

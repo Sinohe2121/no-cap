@@ -7,8 +7,9 @@ import prisma from '@/lib/prisma';
  *   netCost = (grossSalary + fringe + SBC) × (1 − meetingRate)
  *   ticketCost = netCost × appliedSP(ticket) / devTotalAppliedSP
  *
- * Ticket scope: ALL tickets that were open during the payroll period
- * (still open OR resolved within the period month), not just newly imported ones.
+ * Ticket scope: tickets explicitly imported for the payroll period. Open
+ * tickets are not rolled forward; a later Jira import must assign them to the
+ * later period before they participate in that period's allocation.
  *
  * Applied SP uses BUG_SP_FALLBACK / OTHER_SP_FALLBACK for tickets with 0 Jira SP.
  *
@@ -54,22 +55,12 @@ export async function persistTicketCosts(importPeriodLabel: string): Promise<{ u
     const periodFringeRate: number = (payrollImport as any).fringeBenefitRate ?? globalFringeRate;
     const meetingRate: number = (payrollImport as any).meetingTimeRate ?? globalMeetingRate;
 
-    // ── Derive period dates from payroll import pay date ─────────────────
-    const payDate = new Date(payrollImport.payDate);
-    const periodStart = new Date(payDate.getFullYear(), payDate.getMonth(), 1);
-    const periodEnd = new Date(payDate.getFullYear(), payDate.getMonth() + 1, 0, 23, 59, 59);
-
-    // ── Load ALL tickets open during this period ───────────────────────
-    // "Open during period" = still open (no resolutionDate) OR resolved within this month.
-    // This matches the same selection logic as calculatePeriodCosts in calculations.ts.
+    // ── Load tickets imported for this period ──────────────────────────
     const devIds = payrollImport.entries.map(e => e.developerId);
     const tickets = await prisma.jiraTicket.findMany({
         where: {
             assigneeId: { in: devIds },
-            OR: [
-                { resolutionDate: null },
-                { resolutionDate: { gte: periodStart, lte: periodEnd } },
-            ],
+            importPeriod: importPeriodLabel,
         },
         select: { id: true, assigneeId: true, storyPoints: true, issueType: true },
     });

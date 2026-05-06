@@ -7,11 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { JiraTicketLink } from '@/components/JiraTicketPanel';
-
-const MONTH_NAMES = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-];
+import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
 
 function getLastDayOfMonth(year: number, month: number): number {
     return new Date(year, month, 0).getDate();
@@ -186,7 +182,7 @@ export default function ImportPeriodPage() {
             const res = await fetch('/api/integrations/jira/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tickets: ticketsToImport, importPeriod: `${getMonthLabel(month)} ${year}` }),
+                body: JSON.stringify({ tickets: ticketsToImport, importPeriod: formatPeriodLabel(month, year) }),
             });
             if (!res.ok) {
                 const err = await res.json();
@@ -330,7 +326,7 @@ export default function ImportPeriodPage() {
                                         <strong>Resolved tickets:</strong> All tickets resolved between {getMonthLabel(month)} 1 and {getMonthLabel(month)} {getLastDayOfMonth(year, month)}, {year} (regardless of when created)
                                     </li>
                                     <li>
-                                        <strong>Open tickets:</strong> All tickets still open as of {getMonthLabel(month)} {getLastDayOfMonth(year, month)}, {year} — not resolved before {getMonthLabel(month)} 1 and not closed during the period
+                                        <strong>No rollforward:</strong> Unresolved tickets wait for the period import in which they are resolved.
                                     </li>
                                     {rosterOnly && (
                                         <li>

@@ -99,11 +99,51 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: 'No tickets to import' });
         }
 
-        // ── Step 4: Insert tickets (skip duplicates on unique ticketId) ───────────
-        const result = await prisma.jiraTicket.createMany({
-            data: dataToInsert,
-            skipDuplicates: true,
+        // ── Step 4: Insert new tickets in bulk; update existing ones in place ──
+        // Re-imports must overwrite importPeriod so a resolved ticket lands in
+        // the period it actually belongs to (no date-based rollforward).
+        // Fresh imports take the createMany fast path; only re-imports pay the
+        // per-row update cost, and only for tickets that already exist.
+        const existingTickets = await prisma.jiraTicket.findMany({
+            where: { ticketId: { in: dataToInsert.map((t) => t.ticketId) } },
+            select: { ticketId: true },
         });
+        const existingTicketIds = new Set(existingTickets.map((t) => t.ticketId));
+        const newTickets = dataToInsert.filter((t) => !existingTicketIds.has(t.ticketId));
+        const updateTargets = dataToInsert.filter((t) => existingTicketIds.has(t.ticketId));
+
+        let importedCount = 0;
+        if (newTickets.length > 0) {
+            const created = await prisma.jiraTicket.createMany({
+                data: newTickets,
+                skipDuplicates: true,
+            });
+            importedCount = created.count;
+        }
+
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < updateTargets.length; i += BATCH_SIZE) {
+            const batch = updateTargets.slice(i, i + BATCH_SIZE);
+            await prisma.$transaction(
+                batch.map((ticket) =>
+                    prisma.jiraTicket.update({
+                        where: { ticketId: ticket.ticketId },
+                        data: {
+                            epicKey: ticket.epicKey,
+                            issueType: ticket.issueType,
+                            summary: ticket.summary,
+                            storyPoints: ticket.storyPoints,
+                            resolutionDate: ticket.resolutionDate,
+                            assigneeId: ticket.assigneeId,
+                            projectId: ticket.projectId,
+                            customFields: ticket.customFields,
+                            importPeriod: ticket.importPeriod,
+                        },
+                    })
+                )
+            );
+        }
+        const updatedCount = updateTargets.length;
 
         // ── Step 5: Retroactively link any orphaned tickets (projectId=null) ─────
         // This handles tickets that were previously imported without a project mapping
@@ -130,7 +170,8 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             message: 'Import successful',
-            importedCount: result.count,
+            importedCount,
+            updatedCount,
             projectsCreated: createdProjects.length,
             projectsCreatedNames: createdProjects.map(p => p.epicKey),
             costsUpdated,
@@ -141,4 +182,3 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to import tickets' }, { status: 500 });
     }
 }
-

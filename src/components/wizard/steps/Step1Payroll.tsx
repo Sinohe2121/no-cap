@@ -3,31 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, Check, AlertCircle, ArrowRight, FileSpreadsheet, Users, DollarSign, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useWizard } from '@/context/WizardContext';
+import {
+    findGapPeriods,
+    suggestNextPeriod,
+    type PayrollPeriodRef,
+    type AccountingPeriodRef,
+    type SuggestedPeriod,
+} from '@/lib/wizardSuggest';
+import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
 
-const MONTH_NAMES = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December',
-];
-
-interface PayrollPeriodRef {
-    id: string;
-    label: string;
-    payDate: string;
-    year: number;
-}
-
-interface AccountingPeriodRef {
-    id: string;
-    month: number; // 1-12
-    year: number;
-    journalEntries: { id: string }[];
-}
-
-interface GapPeriod {
-    month: number;
-    year: number;
-    label: string;
-}
+type GapPeriod = SuggestedPeriod;
 
 interface ParsedRow {
     name: string;
@@ -84,52 +69,12 @@ function fmtUSD(amount: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 }
 
-function payDateToMonthYear(payDate: string): { month: number; year: number } {
-    const parts = String(payDate).split('T')[0].split('-');
-    return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
-}
-
-/** Return the list of payroll periods that don't yet have generated journal entries. */
-function findGapPeriods(
-    imports: PayrollPeriodRef[],
-    accountingPeriods: AccountingPeriodRef[],
-): GapPeriod[] {
-    const periodsWithEntries = new Set(
-        accountingPeriods
-            .filter(p => Array.isArray(p.journalEntries) && p.journalEntries.length > 0)
-            .map(p => `${p.year}-${p.month}`)
-    );
-    return [...imports]
-        .sort((a, b) => (a.payDate < b.payDate ? -1 : 1))
-        .map(imp => payDateToMonthYear(imp.payDate))
-        .filter(({ month, year }) => !periodsWithEntries.has(`${year}-${month}`))
-        .map(({ month, year }) => ({ month, year, label: `${MONTH_NAMES[month - 1]} ${year}` }));
-}
-
-/**
- * Suggest which period the user should work on next:
- *   1. If there's a payroll period that already exists but has NO journal
- *      entries, suggest the earliest such period (catch-up first).
- *   2. Otherwise, suggest the month after the latest payroll import.
- *   3. If there are no payroll imports at all, return null.
- */
-function suggestNextPeriod(
-    imports: PayrollPeriodRef[],
-    accountingPeriods: AccountingPeriodRef[],
-): { month: number; year: number; label: string } | null {
-    const gaps = findGapPeriods(imports, accountingPeriods);
-    if (gaps.length > 0) return gaps[0];
-
-    if (imports.length === 0) return null;
-    const latest = [...imports].sort((a, b) => (a.payDate < b.payDate ? 1 : -1))[0];
-    const { month: m, year: y } = payDateToMonthYear(latest.payDate);
-    const nextMonth = m === 12 ? 1 : m + 1;
-    const nextYear = m === 12 ? y + 1 : y;
-    return { month: nextMonth, year: nextYear, label: `${MONTH_NAMES[nextMonth - 1]} ${nextYear}` };
-}
+// Suggestion + gap helpers live in @/lib/wizardSuggest so the WizardContext
+// can re-derive the period as soon as the app loads (keeps the resume chip
+// honest when the database changes underneath a cached wizard state).
 
 export default function Step1Payroll() {
-    const { period, setPeriod, goTo, markCompleted } = useWizard();
+    const { period, periodAuto, setPeriod, goTo, markCompleted } = useWizard();
 
     const [imports, setImports] = useState<PayrollPeriodRef[]>([]);
     const [accountingPeriods, setAccountingPeriods] = useState<AccountingPeriodRef[]>([]);
@@ -160,16 +105,18 @@ export default function Step1Payroll() {
                 const apsArr: AccountingPeriodRef[] = Array.isArray(apData) ? apData : [];
                 setImports(importsArr);
                 setAccountingPeriods(apsArr);
-                if (!period) {
-                    const next = suggestNextPeriod(importsArr, apsArr) || (() => {
-                        const now = new Date();
-                        return { month: now.getMonth() + 1, year: now.getFullYear(), label: `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` };
-                    })();
-                    setPeriod(next);
+
+                // Re-derive when no period yet OR the period was auto-set
+                // (not user-overridden). Keeps the wizard in sync with the DB.
+                if (!period || periodAuto) {
+                    const next = suggestNextPeriod(importsArr, apsArr);
+                    if (!period || period.month !== next.month || period.year !== next.year) {
+                        setPeriod(next, { auto: true });
+                    }
                 }
             })
             .finally(() => setLoadingPeriods(false));
-    }, [period, setPeriod]);
+    }, [period, periodAuto, setPeriod]);
 
     const latestImported = useMemo(() => {
         if (imports.length === 0) return null;
@@ -295,7 +242,10 @@ export default function Step1Payroll() {
     const applyOverride = () => {
         if (overrideMonth === '') return;
         const mi = Number(overrideMonth);
-        setPeriod({ month: mi, year: overrideYear, label: `${MONTH_NAMES[mi - 1]} ${overrideYear}` });
+        setPeriod(
+            { month: mi, year: overrideYear, label: formatPeriodLabel(mi, overrideYear) },
+            { auto: false },
+        );
         setOverrideEnabled(false);
     };
 

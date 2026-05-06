@@ -59,14 +59,7 @@ export async function GET(request: Request) {
             for (const imp of payrollImports) {
                 const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
                 const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
-                const pd = new Date(imp.payDate);
-                const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-                const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-                const periodTickets = allTickets.filter(t => {
-                    if (t.importPeriod === imp.label) return true;
-                    const rd = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
-                    return rd >= monthStart && rd <= monthEnd;
-                });
+                const periodTickets = allTickets.filter(t => t.importPeriod === imp.label);
                 const devTotalSP: Record<string, number> = {};
                 const devQRESP: Record<string, number> = {};
                 for (const t of periodTickets) {

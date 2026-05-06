@@ -36,7 +36,7 @@ export async function GET(request: Request) {
             prisma.jiraTicket.findMany({
                 select: {
                     assigneeId: true, storyPoints: true, projectId: true,
-                    issueType: true, resolutionDate: true, createdAt: true,
+                    issueType: true, resolutionDate: true, createdAt: true, importPeriod: true,
                 },
             }),
             prisma.project.findMany({ select: { id: true, isCapitalizable: true } }),
@@ -64,10 +64,13 @@ export async function GET(request: Request) {
             }
         }
         const monthlySalary: Record<string, Record<string, number>> = {};
+        const labelsByMonth: Record<string, string[]> = {};
         for (const imp of payrollImports) {
             const pd = new Date(imp.payDate);
             const key = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
             if (!monthlySalary[key]) monthlySalary[key] = {};
+            if (!labelsByMonth[key]) labelsByMonth[key] = [];
+            labelsByMonth[key].push(imp.label);
             for (const entry of imp.entries) {
                 monthlySalary[key][entry.developerId] = entry.grossSalary;
             }
@@ -97,20 +100,14 @@ export async function GET(request: Request) {
         for (const monthKey of filteredMonths) {
             monthlyByType[monthKey] = { Story: 0, Bug: 0, Task: 0, Epic: 0, Subtask: 0, Capex: 0 };
 
-            const [y, m] = monthKey.split('-').map(Number);
-            const monthStart = new Date(y, m - 1, 1);
-            const monthEnd = new Date(y, m, 0, 23, 59, 59);
-
             const salaryLookup = monthlySalary[monthKey] || latestSalaryByDev;
+            const periodLabels = new Set(labelsByMonth[monthKey] || []);
 
-            // Group tickets open during this month by developer
+            // Group tickets explicitly imported for this month by developer.
             const ticketsByDevInMonth: Record<string, typeof allTicketsRaw> = {};
             for (const t of allTicketsRaw) {
                 if (!t.assigneeId) continue;
-                if (t.resolutionDate) {
-                    const rd = new Date(t.resolutionDate);
-                    if (rd < monthStart || rd > monthEnd) continue;
-                }
+                if (!t.importPeriod || !periodLabels.has(t.importPeriod)) continue;
                 if (!ticketsByDevInMonth[t.assigneeId]) ticketsByDevInMonth[t.assigneeId] = [];
                 ticketsByDevInMonth[t.assigneeId].push(t);
             }

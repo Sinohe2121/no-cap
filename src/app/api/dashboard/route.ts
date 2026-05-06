@@ -33,7 +33,7 @@ export async function GET(request: Request) {
             prisma.jiraTicket.findMany({
                 select: {
                     assigneeId: true, storyPoints: true, projectId: true,
-                    issueType: true, resolutionDate: true, createdAt: true,
+                    issueType: true, resolutionDate: true, createdAt: true, importPeriod: true,
                 },
             }),
             prisma.accountingPeriod.findMany(),
@@ -49,9 +49,19 @@ export async function GET(request: Request) {
         const appliedSP = (t: { storyPoints: number; issueType: string }) =>
             t.storyPoints > 0 ? t.storyPoints : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
 
+        const selectedPeriodLabels = new Set<string>();
+        for (const imp of payrollImports) {
+            const pd = new Date(imp.payDate);
+            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
+            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
+            if (monthEnd >= periodStart && monthStart <= periodEnd) {
+                selectedPeriodLabels.add(imp.label);
+            }
+        }
+
         // ── Pre-group tickets by assigneeId for O(1) lookup ──
         const ticketsByDev = new Map<string, typeof allTickets>();
-        // Also track which devs had ANY ticket within the selected period (for coverage metric)
+        // Also track which devs had ANY explicitly imported ticket within the selected period.
         const periodAssigneeIds = new Set<string>();
         for (const t of allTickets) {
             if (!t.assigneeId) continue;
@@ -59,9 +69,7 @@ export async function GET(request: Request) {
             if (arr) arr.push(t);
             else ticketsByDev.set(t.assigneeId, [t]);
 
-            // A ticket "belongs" to the period if it was created or resolved within it
-            const ticketDate = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
-            if (ticketDate >= periodStart && ticketDate <= periodEnd) {
+            if (t.importPeriod && selectedPeriodLabels.has(t.importPeriod)) {
                 periodAssigneeIds.add(t.assigneeId);
             }
         }
@@ -128,12 +136,8 @@ export async function GET(request: Request) {
                 const totalCost = grossCost * (1 - globalMeetingRate);
                 if (totalCost <= 0) continue;
 
-                // O(1) lookup instead of O(n) filter
-                const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => {
-                    if (!t.resolutionDate) return true;
-                    const rd = new Date(t.resolutionDate);
-                    return rd >= monthStart && rd <= monthEnd;
-                });
+                // O(1) lookup instead of O(n) filter; no open-ticket rollforward.
+                const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => t.importPeriod === imp.label);
 
                 // Use Applied SP (with fallbacks) to include 0-SP bugs/tasks
                 const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);

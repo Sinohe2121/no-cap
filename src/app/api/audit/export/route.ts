@@ -4,13 +4,9 @@ import { requireAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { calculateAmortization, calculateTicketAmortization } from '@/lib/calculations';
 import { loadClassificationRules, classifyTicket } from '@/lib/classification';
+import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-];
 
 function esc(val: string | number | boolean | null | undefined): string {
     if (val === null || val === undefined) return '';
@@ -55,6 +51,7 @@ export async function GET(request: Request) {
         const periodStart = new Date(year, month - 1, 1);
         const periodEndDate = new Date(year, month, 0, 23, 59, 59);
         const asOfDate = new Date(year, month - 1, 15);
+        const monthLabel = formatPeriodLabel(month, year);
 
         // ── 1. Period + Journal Entries ──────────────────────────────────────
 
@@ -78,22 +75,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Period not found — generate journal entries first' }, { status: 404 });
         }
 
-        // ── 2. Tickets worked during period (open + resolved-in-period) ─────
-
-        const ticketsWorked = await prisma.jiraTicket.findMany({
-            where: {
-                OR: [
-                    { resolutionDate: null },
-                    { resolutionDate: { gte: periodStart, lte: periodEndDate } },
-                ],
-            },
-            include: {
-                project: { select: { id: true, name: true, isCapitalizable: true, status: true, epicKey: true } },
-            },
-            orderBy: [{ projectId: 'asc' }, { ticketId: 'asc' }],
-        });
-
-        // ── 3. Payroll for the period ───────────────────────────────────────
+        // ── 2. Payroll for the period ───────────────────────────────────────
 
         const payrollImports = await prisma.payrollImport.findMany({
             where: {
@@ -106,6 +88,22 @@ export async function GET(request: Request) {
                 },
             },
             orderBy: { payDate: 'asc' },
+        });
+
+        const periodLabels = payrollImports.length > 0
+            ? payrollImports.map((imp) => imp.label)
+            : [monthLabel];
+
+        // ── 3. Tickets imported during period ───────────────────────────────
+
+        const ticketsWorked = await prisma.jiraTicket.findMany({
+            where: {
+                importPeriod: { in: periodLabels },
+            },
+            include: {
+                project: { select: { id: true, name: true, isCapitalizable: true, status: true, epicKey: true } },
+            },
+            orderBy: [{ projectId: 'asc' }, { ticketId: 'asc' }],
         });
 
         // ── 4. Active projects (incl. ones being amortized) ─────────────────
@@ -157,7 +155,6 @@ export async function GET(request: Request) {
         // ── Build CSV ───────────────────────────────────────────────────────
 
         const lines: string[] = [];
-        const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
         const exportedAt = new Date().toISOString();
 
         // ─────────────────────────────────────────────────────────────────────
@@ -583,10 +580,10 @@ export async function GET(request: Request) {
         lines.push(`,,,,,,,Note: Δ ≠ 0 expected — overhead/meeting time goes to ADJUSTMENT (${money(totalAdjustment)})`);
 
         // ─────────────────────────────────────────────────────────────────────
-        // SECTION 12 — Tickets Worked During Period (open + resolved)
+        // SECTION 12 — Tickets Imported During Period
         // ─────────────────────────────────────────────────────────────────────
         lines.push('');
-        lines.push(`═══ TICKETS WORKED DURING PERIOD (${ticketsWorked.length}) ═══`);
+        lines.push(`═══ TICKETS IMPORTED DURING PERIOD (${ticketsWorked.length}) ═══`);
         lines.push('Ticket ID,Epic Key,Project,Project Status,Issue Type,Summary,Story Points,Applied SP,Assignee,Status,Resolution Date,Classification (current rules)');
 
         const appliedSP = (t: { storyPoints: number; issueType: string }) =>

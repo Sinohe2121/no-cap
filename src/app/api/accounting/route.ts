@@ -8,6 +8,7 @@ import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
 import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } from '@/lib/classification';
 import { ACCOUNTS, PERIOD_STATUSES, ENTRY_TYPES, ISSUE_TYPES } from '@/lib/constants';
 import { UpdatePeriodStatusSchema, GenerateEntriesSchema, formatZodError } from '@/lib/validations';
+import { formatPeriodLabel } from '@/lib/periodLabel';
 
 // GET — return all accounting periods
 export async function GET() {
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
         await prisma.journalEntry.deleteMany({ where: { periodId: period.id } });
 
         // ─── STEP 1: Calculate developer-level costs ────────────────────
-        // Uses the new "open during period" ticket selection
+        // Uses explicit importPeriod ticket selection; no open-ticket rollforward.
         const costResults = await calculatePeriodCosts(month, year);
 
         let totalCapitalized = 0;
@@ -248,16 +249,20 @@ export async function POST(request: Request) {
             loadCapitalizableStatuses(),
         ]);
 
-        // Pre-fetch ALL "open during period" tickets for audit trails
+        // Pre-fetch tickets imported for this period for audit trails.
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0, 23, 59, 59);
+        const payrollImportsForPeriod = await prisma.payrollImport.findMany({
+            where: { payDate: { gte: startDate, lte: endDate } },
+            select: { label: true },
+        });
+        const periodLabels = payrollImportsForPeriod.length > 0
+            ? payrollImportsForPeriod.map((imp) => imp.label)
+            : [formatPeriodLabel(month, year)];
         const periodTickets = await prisma.jiraTicket.findMany({
             where: {
                 projectId: { in: allProjectIds },
-                OR: [
-                    { resolutionDate: null },
-                    { resolutionDate: { gte: startDate, lte: endDate } },
-                ],
+                importPeriod: { in: periodLabels },
             },
         });
         const ticketLookup = new Map<string, typeof periodTickets>();
@@ -683,4 +688,3 @@ export async function POST(request: Request) {
         return handleApiError(error, 'Failed to generate journal entries');
     }
 }
-

@@ -1,12 +1,14 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { fetchAndSuggest } from '@/lib/wizardSuggest';
 
-export type WizardStep = 'payroll' | 'jira' | 'journal';
+export type WizardStep = 'payroll' | 'jira' | 'projects' | 'journal';
 
 export const WIZARD_STEPS: { id: WizardStep; title: string; subtitle: string }[] = [
     { id: 'payroll', title: 'Import Payroll', subtitle: 'CSV for the next period' },
     { id: 'jira', title: 'Import Jira Tickets', subtitle: 'Same period, with classification rules' },
+    { id: 'projects', title: 'Review Projects', subtitle: 'Confirm status and capitalization flags' },
     { id: 'journal', title: 'Generate Journal Entry', subtitle: 'Review control totals & commit' },
 ];
 
@@ -24,6 +26,9 @@ interface WizardState {
     currentStep: WizardStep;
     completed: WizardStep[];
     period: PeriodTarget | null;
+    /** True when the period was set automatically by the suggestion logic;
+     *  false when the user explicitly chose it via the "Change" override. */
+    periodAuto: boolean;
 }
 
 interface WizardContextValue extends WizardState {
@@ -31,7 +36,9 @@ interface WizardContextValue extends WizardState {
     close: () => void;            // hide but keep state (resumable)
     cancel: () => void;           // clear all state
     show: () => void;             // restore visibility
-    setPeriod: (p: PeriodTarget) => void;
+    /** Set the wizard's period. Pass `auto: false` when the user explicitly
+     *  picked the period (override) so the suggestion logic stops touching it. */
+    setPeriod: (p: PeriodTarget, opts?: { auto?: boolean }) => void;
     goTo: (s: WizardStep) => void;
     markCompleted: (s: WizardStep) => void;
 }
@@ -45,6 +52,7 @@ const DEFAULT: WizardState = {
     currentStep: 'payroll',
     completed: [],
     period: null,
+    periodAuto: true,
 };
 
 export function WizardProvider({ children }: { children: React.ReactNode }) {
@@ -59,6 +67,38 @@ export function WizardProvider({ children }: { children: React.ReactNode }) {
             }
         } catch {}
     }, []);
+
+    // Keep the cached period in sync with what's actually in the database.
+    // Runs once on mount + whenever the wizard becomes active. If the user
+    // explicitly overrode the period (`periodAuto: false`), we leave it alone.
+    // This handles the "DB was wiped while the wizard cached a period in
+    // localStorage" case so the resume chip doesn't show a stale month.
+    useEffect(() => {
+        if (!state.periodAuto) return;
+        let cancelled = false;
+        fetchAndSuggest().then(result => {
+            if (cancelled || !result) return;
+            const { suggestion } = result;
+            setState(prev => {
+                if (!prev.periodAuto) return prev;
+                if (prev.period
+                    && prev.period.month === suggestion.month
+                    && prev.period.year === suggestion.year) {
+                    return prev;
+                }
+                const next = { ...prev, period: suggestion };
+                try {
+                    if (typeof window !== 'undefined') {
+                        const { visible: _v, ...rest } = next;
+                        void _v;
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+                    }
+                } catch {}
+                return next;
+            });
+        });
+        return () => { cancelled = true; };
+    }, [state.periodAuto, state.active]);
 
     const persist = useCallback((next: WizardState) => {
         try {
@@ -86,7 +126,13 @@ export function WizardProvider({ children }: { children: React.ReactNode }) {
         setState(DEFAULT);
     }, []);
 
-    const setPeriod = useCallback((p: PeriodTarget) => update({ period: p }), [update]);
+    const setPeriod = useCallback(
+        (p: PeriodTarget, opts?: { auto?: boolean }) => update({
+            period: p,
+            periodAuto: opts?.auto ?? true,
+        }),
+        [update],
+    );
     const goTo = useCallback((s: WizardStep) => update({ currentStep: s }), [update]);
     const markCompleted = useCallback((s: WizardStep) => update(prev => ({
         completed: prev.completed.includes(s) ? prev.completed : [...prev.completed, s],

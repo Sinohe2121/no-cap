@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, X, CalendarDays, FileSpreadsheet, GitPullRequest, BookOpen } from 'lucide-react';
+import { Check, X, CalendarDays, FileSpreadsheet, GitPullRequest, FolderKanban, BookOpen } from 'lucide-react';
 import { useWizard, WIZARD_STEPS, WizardStep } from '@/context/WizardContext';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Step1Payroll from './steps/Step1Payroll';
 import Step2Jira from './steps/Step2Jira';
-import Step3Journal from './steps/Step3Journal';
+import Step3Projects from './steps/Step3Projects';
+import Step4Journal from './steps/Step3Journal';
 
 const STEP_ICONS: Record<WizardStep, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
     payroll: FileSpreadsheet,
     jira: GitPullRequest,
+    projects: FolderKanban,
     journal: BookOpen,
 };
 
@@ -34,7 +36,8 @@ export default function NextPeriodWizard() {
         switch (currentStep) {
             case 'payroll': return <Step1Payroll />;
             case 'jira': return <Step2Jira />;
-            case 'journal': return <Step3Journal />;
+            case 'projects': return <Step3Projects />;
+            case 'journal': return <Step4Journal />;
         }
     };
 

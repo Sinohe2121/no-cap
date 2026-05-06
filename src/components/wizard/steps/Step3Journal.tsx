@@ -26,6 +26,18 @@ interface GenerateResponse {
     entries?: PreviewEntry[];
 }
 
+interface TieOuts {
+    payrollIn: number;
+    payrollOut: number;
+    payrollDelta: number;
+    capJESum: number;
+    capTrailSum: number;
+    capTrailDelta: number;
+    amortJESum: number;
+    amortExpected: number;
+    amortDelta: number;
+}
+
 function fmtUSD(n: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
 }
@@ -37,6 +49,7 @@ export default function Step3Journal() {
     const [generating, setGenerating] = useState(false);
     const [committed, setCommitted] = useState(false);
     const [data, setData] = useState<GenerateResponse | null>(null);
+    const [tieOuts, setTieOuts] = useState<TieOuts | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [missingInputs, setMissingInputs] = useState<MissingInput[]>([]);
     const [periodStatus, setPeriodStatus] = useState<'OPEN' | 'CLOSED' | 'NEW'>('NEW');
@@ -85,10 +98,67 @@ export default function Step3Journal() {
             setData(body as GenerateResponse);
             setCommitted(true);
             markCompleted('journal');
+            // Pull audit pack + amortization context to build the triple tie-out.
+            await computeTieOuts(body);
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Generation failed');
         } finally {
             setGenerating(false);
+        }
+    };
+
+    /** Compute payroll → JE, capitalization → audit-trail, and amortization tie-outs. */
+    const computeTieOuts = async (gen: GenerateResponse) => {
+        try {
+            // 1. Payroll tie-out — direct from generation response
+            const payrollIn = gen.totalFullyLoadedPayroll ?? 0;
+            const payrollOut = (gen.totalCapitalized ?? 0)
+                + (gen.totalExpensed ?? 0)
+                + (gen.totalAdjustment ?? 0);
+            const payrollDelta = payrollIn - payrollOut;
+
+            // 2. Capitalization audit-trail tie-out — fetch the audit pack
+            interface AuditPackEntry {
+                entryType: string;
+                amount: number;
+                developerSummary: { amount: number }[];
+            }
+            const packRes = await fetch(`/api/audit/pack?month=${period.month}&year=${period.year}`);
+            const pack: { entries?: AuditPackEntry[] } = packRes.ok ? await packRes.json() : { entries: [] };
+            const capJEs = (pack.entries || []).filter(e => e.entryType === 'CAPITALIZATION');
+            const capJESum = capJEs.reduce((s, e) => s + e.amount, 0);
+            const capTrailSum = capJEs.reduce(
+                (s, e) => s + e.developerSummary.reduce((ss, d) => ss + d.amount, 0), 0,
+            );
+            const capTrailDelta = capJESum - capTrailSum;
+
+            // 3. Amortization tie-out — sum of project-level monthly charges vs JE total
+            interface ApiProject {
+                allocatedAmount?: number;
+                amortizationMonths?: number;
+                launchDate?: string | null;
+                status?: string;
+            }
+            const projRes = await fetch('/api/projects');
+            const projects: ApiProject[] = projRes.ok ? await projRes.json() : [];
+            const periodEnd = new Date(period.year, period.month, 0, 23, 59, 59);
+            const amortExpected = projects.reduce((sum, p) => {
+                if (!p.launchDate) return sum;
+                const launch = new Date(p.launchDate);
+                if (launch > periodEnd) return sum;
+                const monthly = (p.allocatedAmount ?? 0) / Math.max(1, p.amortizationMonths ?? 36);
+                return sum + monthly;
+            }, 0);
+            const amortJESum = gen.totalAmortization ?? 0;
+            const amortDelta = amortExpected - amortJESum;
+
+            setTieOuts({
+                payrollIn, payrollOut, payrollDelta,
+                capJESum, capTrailSum, capTrailDelta,
+                amortJESum, amortExpected, amortDelta,
+            });
+        } catch {
+            // Soft-fail: leave tieOuts null; the existing payroll banner still renders
         }
     };
 
@@ -211,7 +281,7 @@ export default function Step3Journal() {
 
             {!data && (
                 <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid #E2E4E9' }}>
-                    <button onClick={() => goTo('jira')} className="btn-ghost">
+                    <button onClick={() => goTo('projects')} className="btn-ghost">
                         <ArrowLeft className="w-4 h-4" /> Back
                     </button>
                     <button
@@ -228,32 +298,53 @@ export default function Step3Journal() {
             {/* ── Results ── */}
             {data && splitData && (
                 <>
-                    {/* Tie-out control */}
-                    <div
-                        className="rounded-xl p-4"
-                        style={{
-                            background: Math.abs(splitData.delta) < 1 ? '#EBF5EF' : '#FFF8EE',
-                            border: `1px solid ${Math.abs(splitData.delta) < 1 ? 'rgba(33,148,78,0.25)' : 'rgba(200,100,32,0.25)'}`,
-                        }}
-                    >
-                        <div className="flex items-center justify-between mb-2">
+                    {/* Triple tie-out control panel */}
+                    <div className="rounded-xl p-4 space-y-3" style={{ background: '#F6F6F9', border: '1px solid #E2E4E9' }}>
+                        <div className="flex items-center justify-between">
                             <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#3F4450' }}>
-                                <Sparkles className="w-3.5 h-3.5" /> Payroll Tie-Out Control
+                                <Sparkles className="w-3.5 h-3.5" /> Triple Tie-Out — every number must reconcile
                             </p>
-                            <span style={{
-                                fontSize: 12,
-                                fontWeight: 700,
-                                color: Math.abs(splitData.delta) < 1 ? '#21944E' : '#C86420',
-                            }}>
-                                {Math.abs(splitData.delta) < 1 ? '✓ Ties out' : `⚠ Δ ${fmtUSD(splitData.delta)}`}
-                            </span>
                         </div>
-                        <p className="text-[11px]" style={{ color: '#717684' }}>
-                            <strong style={{ color: '#3F4450' }}>{fmtUSD(splitData.payroll)}</strong> in fully loaded payroll
-                            {' '}allocated as <strong style={{ color: '#21944E' }}>{fmtUSD(splitData.cap)}</strong> capitalized
-                            {' '}+ <strong style={{ color: '#FA4338' }}>{fmtUSD(splitData.exp)}</strong> expensed
-                            {splitData.adj !== 0 && <> + <strong style={{ color: '#4141A2' }}>{fmtUSD(splitData.adj)}</strong> overhead adj.</>}
-                        </p>
+
+                        {/* Check 1 — Payroll → Journal Entry */}
+                        <TieOutRow
+                            label="Payroll → Journal Entry"
+                            description="Fully loaded payroll vs. Capitalization + Expense + Overhead Adj."
+                            sourceA={{ label: 'Loaded payroll', value: splitData.payroll }}
+                            sourceB={{ label: 'Cap + Exp + Adj', value: splitData.cap + splitData.exp + splitData.adj }}
+                            delta={splitData.delta}
+                            tolerance={1}
+                        />
+
+                        {/* Check 2 — Capitalization → Audit Trail */}
+                        {tieOuts && (
+                            <TieOutRow
+                                label="Capitalization → Audit Trail"
+                                description="Sum of CAPITALIZATION entries vs. sum of per-ticket allocations behind them."
+                                sourceA={{ label: 'CAPITALIZATION JEs', value: tieOuts.capJESum }}
+                                sourceB={{ label: 'Audit-trail allocations', value: tieOuts.capTrailSum }}
+                                delta={tieOuts.capTrailDelta}
+                                tolerance={0.01}
+                            />
+                        )}
+
+                        {/* Check 3 — Project schedule → Amortization JE */}
+                        {tieOuts && (
+                            <TieOutRow
+                                label="Project schedule → Amortization JE"
+                                description="Sum of monthly amort across launched projects (cost / useful life) vs. AMORTIZATION entries."
+                                sourceA={{ label: 'Project monthly amort', value: tieOuts.amortExpected }}
+                                sourceB={{ label: 'AMORTIZATION JEs', value: tieOuts.amortJESum }}
+                                delta={tieOuts.amortDelta}
+                                tolerance={1}
+                            />
+                        )}
+
+                        {!tieOuts && (
+                            <p className="text-[11px] italic" style={{ color: '#A4A9B6' }}>
+                                Computing capitalization & amortization tie-outs…
+                            </p>
+                        )}
                     </div>
 
                     {/* Cap vs expense bar */}
@@ -363,7 +454,7 @@ export default function Step3Journal() {
                     </div>
 
                     <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid #E2E4E9' }}>
-                        <button onClick={() => goTo('jira')} className="btn-ghost">
+                        <button onClick={() => goTo('projects')} className="btn-ghost">
                             <ArrowLeft className="w-4 h-4" /> Back
                         </button>
                         <button onClick={() => { cancel(); }} className="btn-primary">
@@ -372,6 +463,43 @@ export default function Step3Journal() {
                     </div>
                 </>
             )}
+        </div>
+    );
+}
+
+interface TieOutRowProps {
+    label: string;
+    description: string;
+    sourceA: { label: string; value: number };
+    sourceB: { label: string; value: number };
+    delta: number;
+    tolerance: number;
+}
+
+function TieOutRow({ label, description, sourceA, sourceB, delta, tolerance }: TieOutRowProps) {
+    const passes = Math.abs(delta) <= tolerance;
+    const accent = passes ? '#21944E' : '#C86420';
+    const accentBg = passes ? '#EBF5EF' : '#FFF8EE';
+    const accentBorder = passes ? 'rgba(33,148,78,0.25)' : 'rgba(200,100,32,0.25)';
+    return (
+        <div className="rounded-lg p-3" style={{ background: accentBg, border: `1px solid ${accentBorder}` }}>
+            <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-bold" style={{ color: '#3F4450' }}>{label}</p>
+                <span style={{ fontSize: 11, fontWeight: 700, color: accent }}>
+                    {passes ? '✓ Ties out' : `⚠ Δ ${fmtUSD(delta)}`}
+                </span>
+            </div>
+            <p className="text-[10px] mb-2" style={{ color: '#717684' }}>{description}</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                    <p className="text-[10px] uppercase tracking-widest" style={{ color: '#A4A9B6' }}>{sourceA.label}</p>
+                    <p className="font-bold tabular-nums" style={{ color: '#3F4450' }}>{fmtUSD(sourceA.value)}</p>
+                </div>
+                <div>
+                    <p className="text-[10px] uppercase tracking-widest" style={{ color: '#A4A9B6' }}>{sourceB.label}</p>
+                    <p className="font-bold tabular-nums" style={{ color: '#3F4450' }}>{fmtUSD(sourceB.value)}</p>
+                </div>
+            </div>
         </div>
     );
 }

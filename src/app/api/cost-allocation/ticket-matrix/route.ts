@@ -67,20 +67,11 @@ export async function GET() {
                 };
             }).sort((a, b) => a.name.localeCompare(b.name));
 
-            // Determine month window from payDate
-            const pd = new Date(imp.payDate);
-            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-
-            // Find tickets for this period (by importPeriod match or resolution/creation date)
+            // Find tickets explicitly imported for this payroll period. No
+            // rollforward: open tickets are included when that later period's
+            // Jira import assigns them to its importPeriod.
             const periodLabel = imp.label;
-            const periodTickets = allTickets.filter((t) => {
-                // First try importPeriod match
-                if (t.importPeriod === periodLabel) return true;
-                // Fallback: resolution or creation date within month window
-                const rd = t.resolutionDate ? new Date(t.resolutionDate) : new Date(t.createdAt);
-                return rd >= monthStart && rd <= monthEnd;
-            });
+            const periodTickets = allTickets.filter((t) => t.importPeriod === periodLabel);
 
             // Build developer lookup & compute total Applied SP per developer
             const devMap = new Map(developers.map((d) => [d.id, d]));
