@@ -1,189 +1,119 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
-import { handleApiError } from '@/lib/apiError';
-import { computeLoadedCost } from '@/lib/costUtils';
 import prisma from '@/lib/prisma';
 import { CreateProjectSchema, UpdateProjectSchema, formatZodError } from '@/lib/validations';
 import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
-import { loadCapitalizableStatuses } from '@/lib/classification';
+import { ENTRY_TYPES } from '@/lib/constants';
 
 export async function GET() {
     try {
-        const currentYear = new Date().getFullYear();
+        // ── Fiscal-year window for YTD scoping ──
+        // Periods are stored as (month, year) on AccountingPeriod. We derive a
+        // [start, end] (month, year) range from the configured fiscal-year start
+        // month, then test each posted JE's period against it.
+        const fyConfig = await prisma.globalConfig.findUnique({ where: { key: 'FISCAL_YEAR_START_MONTH' } });
+        const fyStartMonth = (() => {
+            const raw = fyConfig ? parseInt(fyConfig.value, 10) : 1;
+            return Number.isFinite(raw) ? Math.min(12, Math.max(1, raw)) : 1;
+        })();
+        const today = new Date();
+        const todayMonth = today.getMonth() + 1;
+        const todayYear = today.getFullYear();
+        const fyStartYear = todayMonth >= fyStartMonth ? todayYear : todayYear - 1;
+        const fyEndMonth = fyStartMonth === 1 ? 12 : fyStartMonth - 1;
+        const fyEndYear = fyStartMonth === 1 ? fyStartYear : fyStartYear + 1;
+        const fyStartIdx = fyStartYear * 12 + (fyStartMonth - 1);
+        const fyEndIdx = fyEndYear * 12 + (fyEndMonth - 1);
+        const inFiscalYear = (m: number, y: number) => {
+            const idx = y * 12 + (m - 1);
+            return idx >= fyStartIdx && idx <= fyEndIdx;
+        };
 
-        // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, meetingConfig, developers, payrollImports, allTickets, capitalizableStatuses] = await Promise.all([
-            prisma.project.findMany({
-                select: {
-                    id: true,
-                    name: true,
-                    description: true,
-                    epicKey: true,
-                    status: true,
-                    isCapitalizable: true,
-                    isQRE: true,
-                    amortizationMonths: true,
-                    startingBalance: true,
-                    startingAmortization: true,
-                    startDate: true,
-                    launchDate: true,
-                    overrideReason: true,
-                    mgmtAuthorized: true,
-                    probableToComplete: true,
-                    parentProjectId: true,
-                    _count: { select: { tickets: true, journalEntries: true } },
-                    tickets: {
-                        select: { storyPoints: true, issueType: true },
-                    },
-                    journalEntries: {
-                        where: { entryType: 'AMORTIZATION' },
-                        select: { amount: true },
-                    },
-                    legacyChildren: {
-                        select: {
-                            id: true, name: true, startingBalance: true,
-                            startingAmortization: true, amortizationMonths: true,
-                            launchDate: true, status: true,
+        const projects = await prisma.project.findMany({
+            select: {
+                id: true,
+                name: true,
+                description: true,
+                epicKey: true,
+                status: true,
+                isCapitalizable: true,
+                isQRE: true,
+                amortizationMonths: true,
+                accumulatedCost: true,
+                startingBalance: true,
+                startingAmortization: true,
+                startDate: true,
+                launchDate: true,
+                overrideReason: true,
+                mgmtAuthorized: true,
+                probableToComplete: true,
+                parentProjectId: true,
+                _count: { select: { tickets: true, journalEntries: true } },
+                tickets: {
+                    select: { storyPoints: true, issueType: true },
+                },
+                journalEntries: {
+                    where: {
+                        entryType: {
+                            in: [
+                                ENTRY_TYPES.CAPITALIZATION,
+                                ENTRY_TYPES.EXPENSE_BUG,
+                                ENTRY_TYPES.EXPENSE_TASK,
+                                ENTRY_TYPES.AMORTIZATION,
+                            ],
                         },
                     },
+                    select: {
+                        entryType: true,
+                        amount: true,
+                        period: { select: { month: true, year: true } },
+                    },
                 },
-                orderBy: { createdAt: 'desc' },
-            }),
-            prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
-            prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
-            prisma.developer.findMany({
-                where: { isActive: true },
-                select: { id: true, fringeBenefitRate: true, stockCompAllocation: true },
-            }),
-            prisma.payrollImport.findMany({
-                orderBy: { payDate: 'asc' },
-                include: { entries: { select: { developerId: true, grossSalary: true } } },
-            }),
-            prisma.jiraTicket.findMany({
-                select: {
-                    assigneeId: true, storyPoints: true, projectId: true,
-                    issueType: true, resolutionDate: true, createdAt: true,
+                legacyChildren: {
+                    select: {
+                        id: true, name: true, startingBalance: true,
+                        startingAmortization: true, amortizationMonths: true,
+                        launchDate: true, status: true,
+                    },
                 },
-            }),
-            loadCapitalizableStatuses(),
-        ]);
+            },
+            orderBy: { createdAt: 'desc' },
+        });
 
-        const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
-        const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
-        const eligibleStatusSet = new Set(capitalizableStatuses.map((s) => s.toUpperCase()));
-
-        // Applied SP fallbacks (matches calculatePeriodCosts and dashboard)
-        const BUG_SP_FALLBACK = 1;
-        const OTHER_SP_FALLBACK = 1;
-        const appliedSP = (t: { storyPoints: number; issueType?: string | null }) =>
-            (t.storyPoints > 0) ? t.storyPoints
-            : (t.issueType?.toUpperCase() === 'BUG') ? BUG_SP_FALLBACK : OTHER_SP_FALLBACK;
-
-        // Build quick-lookup maps
-        const projectMap: Record<string, { isCapitalizable: boolean; status: string }> = {};
-        for (const p of projects) projectMap[p.id] = { isCapitalizable: p.isCapitalizable, status: p.status };
-
-        // ── Pre-group tickets by assigneeId for O(1) lookup ──
-        const ticketsByDev = new Map<string, typeof allTickets>();
-        for (const t of allTickets) {
-            if (!t.assigneeId) continue;
-            const arr = ticketsByDev.get(t.assigneeId);
-            if (arr) arr.push(t);
-            else ticketsByDev.set(t.assigneeId, [t]);
-        }
-
-        // ── Compute per-project costs by distributing payroll ──
-        // projectCosts.itd = total cost (cap + opex) for all-time display
-        // projectCapitalized.itd = CAPEX only (STORY on capitalizable projects), matches dashboard CAPEX card
-        const projectCosts: Record<string, { ytd: number; itd: number }> = {};
-        const projectCapitalized: Record<string, { ytd: number; itd: number }> = {};
-        for (const p of projects) {
-            projectCosts[p.id] = { ytd: 0, itd: 0 };
-            projectCapitalized[p.id] = { ytd: 0, itd: 0 };
-        }
-
-        for (const imp of payrollImports) {
-            const pd = new Date(imp.payDate);
-            const isCurrentYear = pd.getFullYear() === currentYear;
-            const monthStart = new Date(pd.getFullYear(), pd.getMonth(), 1);
-            const monthEnd = new Date(pd.getFullYear(), pd.getMonth() + 1, 0, 23, 59, 59);
-
-            const salaryByDev: Record<string, number> = {};
-            for (const entry of imp.entries) {
-                salaryByDev[entry.developerId] = entry.grossSalary;
-            }
-
-            for (const dev of developers) {
-                const salary = salaryByDev[dev.id] || 0;
-                const fringeRate = dev.fringeBenefitRate || globalFringeRate;
-                const sbc = dev.stockCompAllocation;
-                const grossCost = computeLoadedCost(salary, fringeRate, sbc);
-                // Apply meeting rate — matches dashboard CAPEX formula exactly
-                const totalCost = grossCost * (1 - globalMeetingRate);
-                if (totalCost <= 0) continue;
-
-                // "Open during period": still open OR resolved during this month
-                const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => {
-                    if (!t.resolutionDate) return true;
-                    const rd = new Date(t.resolutionDate);
-                    return rd >= monthStart && rd <= monthEnd;
-                });
-
-                // Apply Applied SP so developers with 0-SP tickets are included
-                const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
-                if (totalPoints <= 0) continue;
-
-                // Track total cost (all types) and capex-only (STORY on capitalizable projects)
-                const projPoints: Record<string, number> = {};
-                const storyCapPoints: Record<string, number> = {};
-                for (const t of devTickets) {
-                    if (!t.projectId) continue;
-                    projPoints[t.projectId] = (projPoints[t.projectId] || 0) + appliedSP(t);
-                    // CAPEX: STORY ticket + capitalizable project + eligible status
-                    // Status set is configured at /admin/accounting-standard.
-                    const proj = projectMap[t.projectId];
-                    if (
-                        t.issueType?.toUpperCase() === 'STORY' &&
-                        proj?.isCapitalizable &&
-                        eligibleStatusSet.has((proj.status || '').toUpperCase())
-                    ) {
-                        storyCapPoints[t.projectId] = (storyCapPoints[t.projectId] || 0) + appliedSP(t);
-                    }
-                }
-
-                for (const [projId, points] of Object.entries(projPoints)) {
-                    const amount = (points / totalPoints) * totalCost;
-                    if (!projectCosts[projId]) projectCosts[projId] = { ytd: 0, itd: 0 };
-                    projectCosts[projId].itd += amount;
-                    if (isCurrentYear) projectCosts[projId].ytd += amount;
-                }
-
-                for (const [projId, storyPoints] of Object.entries(storyCapPoints)) {
-                    const capAmount = (storyPoints / totalPoints) * totalCost;
-                    if (!projectCapitalized[projId]) projectCapitalized[projId] = { ytd: 0, itd: 0 };
-                    projectCapitalized[projId].itd += capAmount;
-                    if (isCurrentYear) projectCapitalized[projId].ytd += capAmount;
-                }
-            }
-        }
-
-        // ── Build response ──
         const projectsWithStats = projects.map((p) => {
             const proj = p as Record<string, unknown>;
-            const costs = projectCosts[p.id] || { ytd: 0, itd: 0 };
-            const itdCost = costs.itd + p.startingBalance;
-            const ytdCost = costs.ytd;
 
-            // allocatedAmount: computed live from payroll (STORY-only on cap projects)
-            // Uses same formula as dashboard CAPEX card for full consistency.
-            const capCosts = projectCapitalized[p.id] || { ytd: 0, itd: 0 };
-            const allocatedAmount = capCosts.itd + p.startingBalance;
+            // ── Roll up posted journal entries (the only source of truth) ──
+            // CAP totals come from project.accumulatedCost (the DB column the
+            // accounting POST writes during entry generation) so the projects
+            // table can never disagree with the project detail page.
+            // EXP/AMORT come from posted JEs the same way.
+            let ytdCapPosted = 0;
+            let itdExpPosted = 0;
+            let ytdExpPosted = 0;
+            let itdAmortPosted = 0;
+            for (const je of p.journalEntries) {
+                const inFY = je.period ? inFiscalYear(je.period.month, je.period.year) : false;
+                if (je.entryType === ENTRY_TYPES.CAPITALIZATION) {
+                    if (inFY) ytdCapPosted += je.amount;
+                } else if (je.entryType === ENTRY_TYPES.EXPENSE_BUG || je.entryType === ENTRY_TYPES.EXPENSE_TASK) {
+                    itdExpPosted += je.amount;
+                    if (inFY) ytdExpPosted += je.amount;
+                } else if (je.entryType === ENTRY_TYPES.AMORTIZATION) {
+                    itdAmortPosted += je.amount;
+                }
+            }
+
+            const allocatedAmount = p.accumulatedCost + p.startingBalance;
+            const itdCost = p.accumulatedCost + itdExpPosted + p.startingBalance;
+            const ytdCost = ytdCapPosted + ytdExpPosted;
+            const depreciation = itdAmortPosted + p.startingAmortization;
+            const netAssetValue = Math.max(0, allocatedAmount - depreciation);
 
             const storyPoints = p.tickets.reduce((s, t) => s + t.storyPoints, 0);
             const bugCount = p.tickets.filter((t) => t.issueType.toUpperCase() === 'BUG').length;
-            const depreciation = p.journalEntries.reduce((s, e) => s + e.amount, 0) + p.startingAmortization;
-            const netAssetValue = Math.max(0, allocatedAmount - depreciation);
+
             return {
                 id: p.id,
                 name: p.name,
