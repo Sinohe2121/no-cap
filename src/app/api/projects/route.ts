@@ -6,13 +6,14 @@ import { computeLoadedCost } from '@/lib/costUtils';
 import prisma from '@/lib/prisma';
 import { CreateProjectSchema, UpdateProjectSchema, formatZodError } from '@/lib/validations';
 import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
+import { loadCapitalizableStatuses } from '@/lib/classification';
 
 export async function GET() {
     try {
         const currentYear = new Date().getFullYear();
 
         // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, meetingConfig, developers, payrollImports, allTickets] = await Promise.all([
+        const [projects, fringeConfig, meetingConfig, developers, payrollImports, allTickets, capitalizableStatuses] = await Promise.all([
             prisma.project.findMany({
                 select: {
                     id: true,
@@ -65,10 +66,12 @@ export async function GET() {
                     issueType: true, resolutionDate: true, createdAt: true,
                 },
             }),
+            loadCapitalizableStatuses(),
         ]);
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
         const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
+        const eligibleStatusSet = new Set(capitalizableStatuses.map((s) => s.toUpperCase()));
 
         // Applied SP fallbacks (matches calculatePeriodCosts and dashboard)
         const BUG_SP_FALLBACK = 1;
@@ -78,8 +81,8 @@ export async function GET() {
             : (t.issueType?.toUpperCase() === 'BUG') ? BUG_SP_FALLBACK : OTHER_SP_FALLBACK;
 
         // Build quick-lookup maps
-        const projectMap: Record<string, { isCapitalizable: boolean }> = {};
-        for (const p of projects) projectMap[p.id] = { isCapitalizable: p.isCapitalizable };
+        const projectMap: Record<string, { isCapitalizable: boolean; status: string }> = {};
+        for (const p of projects) projectMap[p.id] = { isCapitalizable: p.isCapitalizable, status: p.status };
 
         // ── Pre-group tickets by assigneeId for O(1) lookup ──
         const ticketsByDev = new Map<string, typeof allTickets>();
@@ -137,8 +140,14 @@ export async function GET() {
                 for (const t of devTickets) {
                     if (!t.projectId) continue;
                     projPoints[t.projectId] = (projPoints[t.projectId] || 0) + appliedSP(t);
-                    // CAPEX: only STORY tickets on capitalizable projects (ASC 350-40)
-                    if (t.issueType?.toUpperCase() === 'STORY' && projectMap[t.projectId]?.isCapitalizable) {
+                    // CAPEX: STORY ticket + capitalizable project + eligible status
+                    // Status set is configured at /admin/accounting-standard.
+                    const proj = projectMap[t.projectId];
+                    if (
+                        t.issueType?.toUpperCase() === 'STORY' &&
+                        proj?.isCapitalizable &&
+                        eligibleStatusSet.has((proj.status || '').toUpperCase())
+                    ) {
                         storyCapPoints[t.projectId] = (storyCapPoints[t.projectId] || 0) + appliedSP(t);
                     }
                 }
