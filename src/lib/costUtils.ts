@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 /**
  * Shared cost computation — single source of truth for loaded cost calculation.
@@ -102,16 +103,14 @@ export async function buildCostAllocations(
     const appliedSP = (t: { storyPoints: number; issueType: string }) =>
         t.storyPoints > 0 ? t.storyPoints : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
 
-    const periodLabels = Array.from(new Set(
-        developers.flatMap((d) => d.payrollEntries.map((pe) => pe.payrollImport.label))
-    ));
-    if (periodLabels.length === 0) periodLabels.push(formatPeriodLabel(month, year));
+    const periodLabel = developers.flatMap((d) => d.payrollEntries.map((pe) => pe.payrollImport.label))[0]
+        ?? formatPeriodLabel(month, year);
 
-    // Tickets explicitly imported for this period.
+    // Tickets active in this period (includes carry-forwards).
     const tickets = await prisma.jiraTicket.findMany({
         where: {
             assigneeId: { in: developers.map((d) => d.id) },
-            importPeriod: { in: periodLabels },
+            ...activeInPeriodWhere(periodLabel),
         },
         include: { project: { select: { id: true, name: true } } },
     });

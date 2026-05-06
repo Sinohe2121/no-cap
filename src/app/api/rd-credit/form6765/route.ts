@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 // Computes QRE (Qualified Research Expenses) for a given year
 // Used by the Form 6765 / R&D Credit page
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
             const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
 
             // Tickets explicitly imported for this period.
-            const periodTickets = allTickets.filter((t) => t.importPeriod === imp.label);
+            const periodTickets = allTickets.filter((t) => isTicketActiveInPeriod(t, imp.label));
 
             // Total and QRE story points per developer
             const devTotalSP: Record<string, number> = {};
@@ -140,7 +141,7 @@ export async function GET(request: Request) {
             const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
             const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
 
-            const periodTickets = allTickets.filter((t) => t.importPeriod === imp.label);
+            const periodTickets = allTickets.filter((t) => isTicketActiveInPeriod(t, imp.label));
 
             // Per developer: SP split by project
             const devTotalSPMap: Record<string, number> = {};

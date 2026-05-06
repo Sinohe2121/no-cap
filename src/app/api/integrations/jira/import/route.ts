@@ -99,11 +99,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: 'No tickets to import' });
         }
 
-        // ── Step 4: Insert new tickets in bulk; update existing ones in place ──
-        // Re-imports must overwrite importPeriod so a resolved ticket lands in
-        // the period it actually belongs to (no date-based rollforward).
-        // Fresh imports take the createMany fast path; only re-imports pay the
-        // per-row update cost, and only for tickets that already exist.
+        // ── Step 4: Insert new tickets in bulk; refresh existing ones in place ──
+        // importPeriod is FIRST-SEEN — set on insert and never overwritten on
+        // re-encounter. A ticket open at end of March is imported with
+        // importPeriod="March 2026"; when April's wizard runs (still open or
+        // now resolved), April's import refreshes resolutionDate, summary,
+        // story points, assignee, etc. but leaves importPeriod = March 2026.
+        // The "active in period N" derivation (importPeriod ≤ N AND not
+        // resolved before N starts) keeps the ticket in scope for every
+        // period until it actually closes.
+        // Fresh inserts take the createMany fast path; only re-encounters pay
+        // the per-row update cost.
         const existingTickets = await prisma.jiraTicket.findMany({
             where: { ticketId: { in: dataToInsert.map((t) => t.ticketId) } },
             select: { ticketId: true },
@@ -128,6 +134,10 @@ export async function POST(request: Request) {
                 batch.map((ticket) =>
                     prisma.jiraTicket.update({
                         where: { ticketId: ticket.ticketId },
+                        // NOTE: deliberately omitting importPeriod — first-seen
+                        // is immutable once set. Re-encounters refresh current
+                        // state (resolutionDate, assignee, etc.) but the
+                        // ticket stays anchored to its original period.
                         data: {
                             epicKey: ticket.epicKey,
                             issueType: ticket.issueType,
@@ -137,7 +147,6 @@ export async function POST(request: Request) {
                             assigneeId: ticket.assigneeId,
                             projectId: ticket.projectId,
                             customFields: ticket.customFields,
-                            importPeriod: ticket.importPeriod,
                         },
                     })
                 )

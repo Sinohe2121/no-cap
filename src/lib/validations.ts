@@ -194,10 +194,15 @@ export const JiraImportSchema = z.object({
         issueType: z.string(),
         summary: z.string(),
         storyPoints: z.number(),
+        createdDate: z.string().nullable().optional(),
         resolutionDate: z.string().nullable().optional(),
         assigneeId: z.string().nullable(),
         assigneeName: z.string(),
         customFields: z.record(z.string(), z.string()).optional(),
+        // Bucket metadata from preview — server still authoritatively decides
+        // insert-vs-update by DB existence, these are advisory only.
+        bucket: z.enum(['new', 'carryForwardMatched', 'carryForwardUnexpected']).optional(),
+        originPeriod: z.string().nullable().optional(),
     })).min(1, 'At least one ticket is required'),
     importPeriod: z.string().optional(),
 });

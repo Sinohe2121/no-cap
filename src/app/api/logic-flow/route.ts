@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 export interface FlowNode {
     id: string;
@@ -86,15 +87,13 @@ export async function GET() {
                 where: { payDate: { gte: periodStart, lte: periodEnd } },
                 select: { label: true },
             });
-            const periodLabels = payrollImports.length > 0
-                ? payrollImports.map((imp) => imp.label)
-                : [formatPeriodLabel(latestPeriod.month, latestPeriod.year)];
+            const periodLabel = payrollImports.length > 0
+                ? payrollImports[0].label
+                : formatPeriodLabel(latestPeriod.month, latestPeriod.year);
 
             const [ticketCount, capitalizedTickets, amortizingTickets] = await Promise.all([
                 prisma.jiraTicket.count({
-                    where: {
-                        importPeriod: { in: periodLabels },
-                    },
+                    where: activeInPeriodWhere(periodLabel),
                 }),
                 prisma.auditTrail.count({
                     where: {

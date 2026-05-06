@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Search, Download, AlertCircle, CheckSquare, Info, ListFilter, Edit3, Users, Filter } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search, Download, AlertCircle, CheckSquare, Info, ListFilter, Edit3, Users, Filter, Clock, AlertTriangle } from 'lucide-react';
 import { useWizard } from '@/context/WizardContext';
 import LoadingPanel from '../LoadingPanel';
 
@@ -27,6 +27,16 @@ interface PreviewTicket {
     importable: boolean;
     unimportableReasons?: string[];
     customFields?: Record<string, string>;
+    bucket?: 'new' | 'carryForwardMatched' | 'carryForwardUnexpected';
+    originPeriod?: string | null;
+}
+
+interface MissingCarryForward {
+    ticketId: string;
+    importPeriod: string | null;
+    resolutionDate: string | null;
+    assigneeName: string | null;
+    summary: string | null;
 }
 
 interface CustomFieldConfig { id: string; name: string }
@@ -53,6 +63,9 @@ export default function Step2Jira() {
     const [previewing, setPreviewing] = useState(false);
     const [importing, setImporting] = useState(false);
     const [tickets, setTickets] = useState<PreviewTicket[]>([]);
+    const [missingCarryForwards, setMissingCarryForwards] = useState<MissingCarryForward[]>([]);
+    const [previousPeriodLabel, setPreviousPeriodLabel] = useState<string | null>(null);
+    const [bucketFilter, setBucketFilter] = useState<'all' | 'new' | 'carryForwardMatched' | 'carryForwardUnexpected'>('all');
     const [customFieldsConfig, setCustomFieldsConfig] = useState<CustomFieldConfig[]>([]);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
@@ -96,9 +109,12 @@ export default function Step2Jira() {
             const data = await res.json();
             const arr: PreviewTicket[] = data.tickets || [];
             setTickets(arr);
+            setMissingCarryForwards(data.buckets?.missingCarryForwards || []);
+            setPreviousPeriodLabel(data.previousPeriodLabel || null);
             setCustomFieldsConfig(data.customFieldsConfig || []);
             setColumnFilters({});
             setOpenFilterColumn(null);
+            setBucketFilter('all');
             setSelectedIds(new Set(arr.filter(t => t.importable).map(t => t.ticketId)));
             setPhase('preview');
         } catch (e: unknown) {
@@ -108,16 +124,27 @@ export default function Step2Jira() {
         }
     };
 
+    const bucketCounts = useMemo(() => ({
+        all: tickets.length,
+        new: tickets.filter(t => t.bucket === 'new').length,
+        carryForwardMatched: tickets.filter(t => t.bucket === 'carryForwardMatched').length,
+        carryForwardUnexpected: tickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
+    }), [tickets]);
+
     const filteredTickets = useMemo(() => {
-        if (Object.keys(columnFilters).length === 0) return tickets;
-        return tickets.filter(t => {
+        let rows = tickets;
+        if (bucketFilter !== 'all') {
+            rows = rows.filter(t => t.bucket === bucketFilter);
+        }
+        if (Object.keys(columnFilters).length === 0) return rows;
+        return rows.filter(t => {
             for (const [colName, allowed] of Object.entries(columnFilters)) {
                 const val = (t.customFields?.[colName] || '(Blank)').toString();
                 if (!allowed.has(val)) return false;
             }
             return true;
         });
-    }, [tickets, columnFilters]);
+    }, [tickets, bucketFilter, columnFilters]);
 
     const getUniqueValuesForCol = (colName: string): string[] => {
         const vals = new Set<string>();
@@ -203,8 +230,8 @@ export default function Step2Jira() {
                     expectedSeconds={45}
                     stages={[
                         { at: 0,  label: 'Authenticating with Jira and loading custom-field config…' },
-                        { at: 4,  label: `Querying tickets resolved between ${startDate} and ${endDate}…` },
-                        { at: 14, label: 'Paginating through resolved Jira issues (100 per page)…' },
+                        { at: 4,  label: `Querying tickets active between ${startDate} and ${endDate} (resolved in period or still open at period end)…` },
+                        { at: 14, label: 'Paginating through Jira issues (100 per page)…' },
                         { at: 28, label: 'Collecting the period import snapshot…' },
                         { at: 45, label: rosterOnly ? 'Matching assignees against the payroll roster…' : 'Matching assignees to your developer list…' },
                         { at: 60, label: 'Building preview rows and applying classification rules…' },
@@ -221,11 +248,12 @@ export default function Step2Jira() {
                             Inclusion / exclusion logic
                         </h4>
                         <div className="rounded-xl p-4 text-xs space-y-1.5" style={{ background: '#FFFCEB', border: '1px solid #F5E6A3', color: '#5A4A1A' }}>
-                            <p>• <strong>Resolved tickets:</strong> all tickets resolved between {MONTH_NAMES[period.month - 1]} 1 and {MONTH_NAMES[period.month - 1]} {lastDay}, {period.year}.</p>
-                            <p>• <strong>No rollforward:</strong> unresolved tickets wait for the period import in which they are resolved.</p>
+                            <p>• <strong>Resolved in period:</strong> every ticket resolved between {MONTH_NAMES[period.month - 1]} 1 and {MONTH_NAMES[period.month - 1]} {lastDay}, {period.year} — regardless of when it was created.</p>
+                            <p>• <strong>Open at period end:</strong> every ticket created on or before {MONTH_NAMES[period.month - 1]} {lastDay}, {period.year} that was still unresolved as of that date — so the full universe of tickets worked on this period is available for cost distribution.</p>
+                            <p>• <strong>Excluded:</strong> tickets resolved before {MONTH_NAMES[period.month - 1]} 1, {period.year} — they belong to the earlier period in which they closed.</p>
                             <p>• <strong>Roster filter:</strong> when on, only tickets assigned to developers with payroll &gt; $1 for {period.label}.</p>
                             <p>• <strong>BUG tickets:</strong> always expensed, never capitalized — regardless of project status.</p>
-                            <p>• <strong>Depreciation:</strong> capitalized work begins amortizing in <strong>{depreciationStart}</strong>.</p>
+                            <p>• <strong>Amortization:</strong> capitalized tickets resolved this period begin amortizing in <strong>{depreciationStart}</strong>; unresolved tickets stay in WIP and start amortizing the month after they resolve.</p>
                         </div>
 
                         {/* Roster toggle */}
@@ -377,6 +405,74 @@ export default function Step2Jira() {
                         </div>
                     )}
 
+                    {/* Audit-A: tickets we expected as carry-forwards but Jira didn't return */}
+                    {missingCarryForwards.length > 0 && (
+                        <div className="rounded-xl p-3" style={{ background: '#FFFCEB', border: '1px solid #F5C76A' }}>
+                            <div className="flex items-start gap-2 mb-2">
+                                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#D3A236' }} />
+                                <div className="flex-1">
+                                    <p className="text-xs font-semibold" style={{ color: '#8B7020' }}>
+                                        {missingCarryForwards.length} expected carry-forward{missingCarryForwards.length === 1 ? '' : 's'} not in Jira's response
+                                    </p>
+                                    <p className="text-[11px] mt-0.5" style={{ color: '#5A4A1A' }}>
+                                        Active in our DB at end of <strong>{previousPeriodLabel}</strong> but not returned by Jira for {period.label} —
+                                        may have been resolved out-of-band, deleted, or moved out of scope.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="rounded border bg-white overflow-hidden" style={{ borderColor: '#F5E6A3', maxHeight: 160, overflowY: 'auto' }}>
+                                <table className="w-full text-[11px]">
+                                    <thead style={{ background: '#FAFBFC', position: 'sticky', top: 0 }}>
+                                        <tr>
+                                            <th className="px-2 py-1.5 text-left font-semibold uppercase" style={{ color: '#A4A9B6', fontSize: 9 }}>Ticket</th>
+                                            <th className="px-2 py-1.5 text-left font-semibold uppercase" style={{ color: '#A4A9B6', fontSize: 9 }}>Summary</th>
+                                            <th className="px-2 py-1.5 text-left font-semibold uppercase" style={{ color: '#A4A9B6', fontSize: 9 }}>Assignee</th>
+                                            <th className="px-2 py-1.5 text-left font-semibold uppercase" style={{ color: '#A4A9B6', fontSize: 9 }}>First Imported</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {missingCarryForwards.map(t => (
+                                            <tr key={t.ticketId} style={{ borderTop: '1px solid #F0E4B8' }}>
+                                                <td className="px-2 py-1 font-mono" style={{ color: '#4141A2' }}>{t.ticketId}</td>
+                                                <td className="px-2 py-1 max-w-[220px] truncate" style={{ color: '#3F4450' }} title={t.summary || ''}>{t.summary || '—'}</td>
+                                                <td className="px-2 py-1" style={{ color: '#717684' }}>{t.assigneeName || '—'}</td>
+                                                <td className="px-2 py-1" style={{ color: '#717684' }}>{t.importPeriod || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Bucket pills — filter the table to one source class */}
+                    {tickets.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {([
+                                { key: 'all', label: 'All', count: bucketCounts.all, color: '#717684', bg: '#F6F6F9' },
+                                { key: 'new', label: 'New in period', count: bucketCounts.new, color: '#21944E', bg: '#EBF5EF' },
+                                { key: 'carryForwardMatched', label: 'Carry-forward (matched)', count: bucketCounts.carryForwardMatched, color: '#4141A2', bg: '#F0F0FA' },
+                                { key: 'carryForwardUnexpected', label: 'Unexpected carry-forward', count: bucketCounts.carryForwardUnexpected, color: '#A85D00', bg: '#FFF4E0' },
+                            ] as const).map(p => {
+                                const isActive = bucketFilter === p.key;
+                                return (
+                                    <button
+                                        key={p.key}
+                                        onClick={() => setBucketFilter(p.key)}
+                                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full transition-all"
+                                        style={{
+                                            background: isActive ? p.color : p.bg,
+                                            color: isActive ? '#FFFFFF' : p.color,
+                                            border: `1px solid ${isActive ? p.color : 'transparent'}`,
+                                        }}
+                                    >
+                                        {p.label} <span className="opacity-80">· {p.count}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {/* Dynamic-column table — mirrors /projects/import */}
                     <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 320, border: '1px solid #E2E4E9', borderRadius: 12 }}>
                         <table className="data-table" style={{ minWidth: customFieldsConfig.length > 4 ? 800 : '100%' }}>
@@ -400,6 +496,7 @@ export default function Step2Jira() {
                                             className="cursor-pointer"
                                         />
                                     </th>
+                                    <th style={{ textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Source</th>
                                     {customFieldsConfig.map((col, idx) => {
                                         const isFiltered = columnFilters[col.name] !== undefined;
                                         const uniqueVals = openFilterColumn === col.name ? getUniqueValuesForCol(col.name) : [];
@@ -454,7 +551,15 @@ export default function Step2Jira() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredTickets.map(ticket => (
+                                {filteredTickets.map(ticket => {
+                                    const bucketStyle = ticket.bucket === 'new'
+                                        ? { bg: '#EBF5EF', color: '#21944E', label: 'New' }
+                                        : ticket.bucket === 'carryForwardMatched'
+                                        ? { bg: '#F0F0FA', color: '#4141A2', label: `Carry-forward${ticket.originPeriod ? ` · ${ticket.originPeriod}` : ''}` }
+                                        : ticket.bucket === 'carryForwardUnexpected'
+                                        ? { bg: '#FFF4E0', color: '#A85D00', label: `Unexpected${ticket.originPeriod ? ` · ${ticket.originPeriod}` : ''}` }
+                                        : { bg: '#F6F6F9', color: '#717684', label: '—' };
+                                    return (
                                     <tr
                                         key={ticket.ticketId}
                                         title={ticket.importable ? '' : ticket.unimportableReasons?.join('\n')}
@@ -487,6 +592,12 @@ export default function Step2Jira() {
                                                 )}
                                             </div>
                                         </td>
+                                        <td>
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap" style={{ background: bucketStyle.bg, color: bucketStyle.color }}>
+                                                {ticket.bucket && ticket.bucket !== 'new' && <Clock className="w-2.5 h-2.5" />}
+                                                {bucketStyle.label}
+                                            </span>
+                                        </td>
                                         {customFieldsConfig.map(col => {
                                             const val = ticket.customFields?.[col.name];
                                             if (col.id === 'issuetype' && val) {
@@ -513,7 +624,8 @@ export default function Step2Jira() {
                                             );
                                         })}
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

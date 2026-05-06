@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 interface DevRow {
     id: string;
@@ -65,19 +66,19 @@ export async function GET() {
             },
         });
 
-        // ── 4a. Pre-bucket tickets by import period + assignee ───────────
-        // The previous implementation re-scanned `allTickets` once per
-        // (developer × payroll import) — O(D × I × T). For 50 devs × 12 months
-        // × 5k tickets that's 3M comparisons. We bucket once up front so each
-        // inner-loop lookup is O(devTickets) instead of O(allTickets).
+        // ── 4a. Pre-bucket tickets by assignee ───────────────────────────
+        // We can't pre-key by (importPeriod, assignee) anymore: a ticket
+        // first imported in February with importPeriod="February 2026" is
+        // ALSO active in March, April, ... until it resolves, so the same
+        // ticket needs to surface in multiple periods. Bucket by assignee
+        // only and let the inner loop apply the active-in-period predicate.
         type DevTicket = (typeof allTickets)[number];
-        const ticketsByPeriodDev = new Map<string, DevTicket[]>();
+        const ticketsByDev = new Map<string, DevTicket[]>();
         for (const t of allTickets) {
             if (!t.assigneeId || !t.importPeriod) continue;
-            const key = `${t.importPeriod}::${t.assigneeId}`;
-            const arr = ticketsByPeriodDev.get(key);
+            const arr = ticketsByDev.get(t.assigneeId);
             if (arr) arr.push(t);
-            else ticketsByPeriodDev.set(key, [t]);
+            else ticketsByDev.set(t.assigneeId, [t]);
         }
 
         // ── 5. Build cost allocation matrix ──────────────────────────
@@ -115,8 +116,10 @@ export async function GET() {
                 const sbc = dev.stockCompAllocation;
                 const totalCost = computeLoadedCost(salary, fringeRate, sbc);
 
-                // Tickets must be explicitly imported for this payroll period.
-                const devTickets = ticketsByPeriodDev.get(`${imp.label}::${dev.id}`) ?? [];
+                // Tickets active in this period: imported on or before, and
+                // not resolved before the period started. Includes carry-forwards.
+                const devAllTickets = ticketsByDev.get(dev.id) ?? [];
+                const devTickets = devAllTickets.filter(t => isTicketActiveInPeriod(t, imp.label));
 
                 const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
 

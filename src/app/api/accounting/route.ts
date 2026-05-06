@@ -9,6 +9,7 @@ import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } fr
 import { ACCOUNTS, PERIOD_STATUSES, ENTRY_TYPES, ISSUE_TYPES } from '@/lib/constants';
 import { UpdatePeriodStatusSchema, GenerateEntriesSchema, formatZodError } from '@/lib/validations';
 import { formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 // GET — return all accounting periods
 export async function GET() {
@@ -94,12 +95,10 @@ export async function POST(request: Request) {
                 where: { payDate: { gte: periodStart, lte: periodEnd } },
             }),
             prisma.jiraTicket.count({
-                where: {
-                    OR: [
-                        { resolutionDate: null },
-                        { resolutionDate: { gte: periodStart, lte: periodEnd } },
-                    ],
-                },
+                // Are there any tickets ACTIVE in this period (i.e. imported
+                // on or before, not resolved before it started)? If not, the
+                // period import hasn't been run yet and we shouldn't post.
+                where: activeInPeriodWhere(formatPeriodLabel(month, year)),
             }),
         ]);
         const missing: ('payroll' | 'tickets')[] = [];
@@ -256,13 +255,16 @@ export async function POST(request: Request) {
             where: { payDate: { gte: startDate, lte: endDate } },
             select: { label: true },
         });
-        const periodLabels = payrollImportsForPeriod.length > 0
-            ? payrollImportsForPeriod.map((imp) => imp.label)
-            : [formatPeriodLabel(month, year)];
+        const periodLabel = payrollImportsForPeriod.length > 0
+            ? payrollImportsForPeriod[0].label
+            : formatPeriodLabel(month, year);
+        // Active in period: imported on or before AND not resolved before
+        // the period started. Carry-forwards from earlier periods stay in
+        // scope until they actually close.
         const periodTickets = await prisma.jiraTicket.findMany({
             where: {
                 projectId: { in: allProjectIds },
-                importPeriod: { in: periodLabels },
+                ...activeInPeriodWhere(periodLabel),
             },
         });
         const ticketLookup = new Map<string, typeof periodTickets>();

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 // Provides live table data for embedding in Policy Memos
 // ?type=PROJECT_SUMMARY|QRE_SUMMARY|PAYROLL_SUMMARY|AMORT_SCHEDULE&year=2026
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
             for (const imp of payrollImports) {
                 const fringeRate: number = (imp as any).fringeBenefitRate ?? globalFringeRate;
                 const meetingRate: number = (imp as any).meetingTimeRate ?? 0;
-                const periodTickets = allTickets.filter(t => t.importPeriod === imp.label);
+                const periodTickets = allTickets.filter(t => isTicketActiveInPeriod(t, imp.label));
                 const devTotalSP: Record<string, number> = {};
                 const devQRESP: Record<string, number> = {};
                 for (const t of periodTickets) {

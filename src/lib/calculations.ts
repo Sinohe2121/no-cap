@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma';
 import { classifyTicket, loadClassificationRules, loadCapitalizableStatuses } from '@/lib/classification';
 import { formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 export interface PeriodCostResult {
     developerId: string;
@@ -28,9 +29,12 @@ export interface PeriodCostResult {
 }
 
 /**
- * Ticket selection: tickets explicitly imported for this payroll period.
- * Tickets do not roll forward by open/resolved date; a later Jira import must
- * assign them to the later importPeriod before they participate in that period.
+ * Ticket selection: tickets explicitly imported for this payroll period —
+ * tickets whose importPeriod equals this period's label. The period import
+ * captures both tickets resolved during the period and tickets still open at
+ * period end (the full universe of tickets developers worked on), so this
+ * filter is sufficient. Subsequent periods' imports re-capture any ticket
+ * that remains open and reassign its importPeriod accordingly.
  */
 export async function calculatePeriodCosts(month: number, year: number): Promise<PeriodCostResult[]> {
     const startDate = new Date(year, month - 1, 1);
@@ -75,16 +79,17 @@ export async function calculatePeriodCosts(month: number, year: number): Promise
         }
     }
 
-    const periodLabels = payrollImports.length > 0
-        ? payrollImports.map((imp) => imp.label)
-        : [formatPeriodLabel(month, year)];
+    const periodLabel = payrollImports.length > 0
+        ? payrollImports[0].label
+        : formatPeriodLabel(month, year);
 
     // ─── TICKET SELECTION ───────────────────────────────────────────
-    // Tickets must be explicitly imported for this period.
+    // Tickets active in this period: imported on or before AND not resolved
+    // before the period started. Includes carry-forwards from earlier periods.
     const allTickets = await prisma.jiraTicket.findMany({
         where: {
             assigneeId: { in: developers.map((d) => d.id) },
-            importPeriod: { in: periodLabels },
+            ...activeInPeriodWhere(periodLabel),
         },
         include: { project: true },
     });

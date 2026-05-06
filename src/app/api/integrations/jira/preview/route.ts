@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { normalizeIssueType } from '@/lib/jiraUtils';
 import { computeLoadedCost } from '@/lib/costUtils';
+import { formatPeriodLabel } from '@/lib/periodLabel';
+import { activeInPeriodWhere } from '@/lib/periodTickets';
 
 export async function POST(request: Request) {
     try {
@@ -86,11 +88,23 @@ export async function POST(request: Request) {
         endAux.setDate(endAux.getDate() + 1);
         const endJql = formatForJql(endAux);
 
-        // Period imports should be explicit snapshots of work completed in
-        // that period. Do not roll open tickets forward; they will be picked
-        // up by the period import in which they are resolved.
-        const jqlResolved = `resolved >= "${startJql}" AND resolved < "${endJql}" ORDER BY created DESC`;
-        const jqlQueries = [jqlResolved];
+        // The period import is the universe of tickets developers worked on
+        // during the period — every ticket whose state at end-of-period was
+        // either "resolved during the period" or "still open." Tickets
+        // resolved before the period began are excluded; they belong to the
+        // earlier period in which they were resolved.
+        //
+        // One combined clause covers both branches:
+        //   • created < endJql                    → ticket existed during the period
+        //   • resolution is EMPTY                 → still open (now)
+        //   • resolved >= startJql                → resolved on/after period start
+        //                                          (covers resolved-during-period
+        //                                          AND resolved-after-period-end —
+        //                                          the latter was still open AS OF
+        //                                          end of period at import time)
+        const jqlActiveDuringPeriod =
+            `created < "${endJql}" AND (resolution is EMPTY OR resolved >= "${startJql}") ORDER BY created DESC`;
+        const jqlQueries = [jqlActiveDuringPeriod];
 
         // ── Parse custom fields config ─────────────────────────────────────────
         let extraFields: { id: string; name: string }[] = [];
@@ -106,7 +120,7 @@ export async function POST(request: Request) {
         const baseFields = [
             'summary', 'issuetype', 'assignee', 'project',
             'customfield_10014', 'customfield_10016', 'customfield_10028',
-            'resolutiondate', 'fixVersions', 'parent',
+            'resolutiondate', 'created', 'fixVersions', 'parent',
         ];
         const fields = Array.from(new Set([...baseFields, ...extraFields.map(f => f.id)]));
 
@@ -157,8 +171,76 @@ export async function POST(request: Request) {
 
         console.log(`[Jira Preview] Fetched ${allIssues.length} total issues from Jira`);
 
-        // ── Process and filter tickets ──────────────────────────────────────────
-        const previewTickets = [];
+        // ── Existing-ticket lookup for new vs carry-forward classification ────
+        // A ticket is "carry-forward" if our DB already has a record for it
+        // (importPeriod is set, from a prior import). The DB record is the
+        // authoritative source for that ticket's first-seen period.
+        const jiraKeysFromQuery = allIssues.map((i: any) => i.key);
+        const existingTicketRows = jiraKeysFromQuery.length > 0
+            ? await prisma.jiraTicket.findMany({
+                where: { ticketId: { in: jiraKeysFromQuery } },
+                select: { ticketId: true, importPeriod: true, resolutionDate: true },
+            })
+            : [];
+        const existingTicketByKey = new Map<string, { importPeriod: string | null; resolutionDate: Date | null }>(
+            existingTicketRows.map(t => [t.ticketId, { importPeriod: t.importPeriod, resolutionDate: t.resolutionDate }]),
+        );
+
+        // ── Audit-A: tickets we expected to see as carry-forwards but didn't ──
+        // The system's last view of these tickets had them active going into
+        // this period (importPeriod ≤ {previous period} AND not resolved before
+        // start of this period). If Jira's response for this period does NOT
+        // include them, something has changed externally — they were closed
+        // out-of-band, deleted, or otherwise dropped from the active scope.
+        const periodLabel = (year && month) ? formatPeriodLabel(month, year) : null;
+        const previousLabel = (year && month)
+            ? (month === 1 ? formatPeriodLabel(12, year - 1) : formatPeriodLabel(month - 1, year))
+            : null;
+
+        let missingCarryForwards: {
+            ticketId: string;
+            importPeriod: string | null;
+            resolutionDate: string | null;
+            assigneeName: string | null;
+            summary: string | null;
+        }[] = [];
+
+        if (previousLabel) {
+            const expectedCarryRows = await prisma.jiraTicket.findMany({
+                where: activeInPeriodWhere(previousLabel),
+                select: {
+                    ticketId: true,
+                    importPeriod: true,
+                    resolutionDate: true,
+                    summary: true,
+                    assignee: { select: { name: true } },
+                },
+            });
+            const jiraKeySet = new Set(jiraKeysFromQuery);
+            missingCarryForwards = expectedCarryRows
+                .filter(t => !jiraKeySet.has(t.ticketId))
+                .map(t => ({
+                    ticketId: t.ticketId,
+                    importPeriod: t.importPeriod,
+                    resolutionDate: t.resolutionDate ? t.resolutionDate.toISOString() : null,
+                    assigneeName: t.assignee?.name ?? null,
+                    summary: t.summary,
+                }));
+        }
+
+        // ── Process and bucket tickets from Jira ────────────────────────────────
+        // Buckets returned to the UI:
+        //   newInPeriod          — not in DB, created during this period (true new work)
+        //   carryForwardMatched  — in DB (importPeriod set in a prior period); refresh-only
+        //   carryForwardUnexpected — not in DB, created BEFORE this period (audit-B:
+        //                            should have been imported earlier; surface so the
+        //                            user can decide to add it now)
+        const newInPeriod: any[] = [];
+        const carryForwardMatched: any[] = [];
+        const carryForwardUnexpected: any[] = [];
+
+        // periodStart is used to classify "new vs unexpected" by Jira's createdDate
+        const periodStartDate = (year && month) ? new Date(year, month - 1, 1) : null;
 
         const extractStoryPoints = (f: any): number => {
             return f.customfield_10016 ?? f.customfield_10014 ?? f.customfield_10028 ?? 0;
@@ -227,7 +309,24 @@ export async function POST(request: Request) {
                 }
             }
 
-            previewTickets.push({
+            const existingDbRow = existingTicketByKey.get(issueKey);
+            const issueCreatedRaw = issue.fields.created;
+            const issueCreatedDate = issueCreatedRaw ? new Date(issueCreatedRaw) : null;
+            // Bucket classification — see comment block above for invariants.
+            let bucket: 'new' | 'carryForwardMatched' | 'carryForwardUnexpected';
+            let originPeriod: string | null = null;
+            if (existingDbRow) {
+                bucket = 'carryForwardMatched';
+                originPeriod = existingDbRow.importPeriod;
+            } else if (periodStartDate && issueCreatedDate && issueCreatedDate < periodStartDate) {
+                bucket = 'carryForwardUnexpected';
+                // Best-effort guess at the period this should have been first imported in
+                originPeriod = formatPeriodLabel(issueCreatedDate.getMonth() + 1, issueCreatedDate.getFullYear());
+            } else {
+                bucket = 'new';
+            }
+
+            const previewRow = {
                 ticketId: issueKey,
                 epicKey: issueProjectKey,
                 projectId: proj?.id || null,
@@ -235,18 +334,45 @@ export async function POST(request: Request) {
                 issueType: normalizeIssueType(issue.fields.issuetype.name),
                 summary: issue.fields.summary,
                 storyPoints: extractStoryPoints(issue.fields),
+                createdDate: issueCreatedRaw ?? null,
                 resolutionDate: issue.fields.resolutiondate,
                 assigneeId: dev?.id || null,
                 assigneeName: dev?.name || assignee?.displayName || 'Unassigned',
                 customFields: customFieldsObj,
                 importable,
                 unimportableReasons: reasons,
-            });
+                bucket,
+                originPeriod,
+            };
+
+            if (bucket === 'new') newInPeriod.push(previewRow);
+            else if (bucket === 'carryForwardMatched') carryForwardMatched.push(previewRow);
+            else carryForwardUnexpected.push(previewRow);
         }
 
-        console.log(`[Jira Preview] After filtering: ${previewTickets.length} tickets returned (rosterOnly=${rosterOnly})`);
+        // Legacy single-array view for any caller that still consumes `tickets`
+        const previewTickets = [...newInPeriod, ...carryForwardMatched, ...carryForwardUnexpected];
 
-        return NextResponse.json({ tickets: previewTickets, customFieldsConfig: extraFields });
+        console.log(
+            `[Jira Preview] Buckets — new: ${newInPeriod.length}, ` +
+            `carry-forward (matched): ${carryForwardMatched.length}, ` +
+            `unexpected carry-forward: ${carryForwardUnexpected.length}, ` +
+            `missing carry-forward: ${missingCarryForwards.length}, ` +
+            `(rosterOnly=${rosterOnly})`,
+        );
+
+        return NextResponse.json({
+            tickets: previewTickets,
+            customFieldsConfig: extraFields,
+            buckets: {
+                newInPeriod,
+                carryForwardMatched,
+                carryForwardUnexpected,
+                missingCarryForwards,
+            },
+            periodLabel,
+            previousPeriodLabel: previousLabel,
+        });
 
     } catch (error) {
         console.error('Jira preview error:', error);

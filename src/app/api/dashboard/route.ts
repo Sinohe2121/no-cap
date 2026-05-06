@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
 import { loadCapitalizableStatuses } from '@/lib/classification';
+import { isTicketActiveInPeriod } from '@/lib/periodTickets';
 
 export async function GET(request: Request) {
     try {
@@ -61,7 +62,8 @@ export async function GET(request: Request) {
 
         // ── Pre-group tickets by assigneeId for O(1) lookup ──
         const ticketsByDev = new Map<string, typeof allTickets>();
-        // Also track which devs had ANY explicitly imported ticket within the selected period.
+        // Also track which devs had ANY ticket active in any of the selected
+        // periods (i.e. imported by N AND not resolved before N started).
         const periodAssigneeIds = new Set<string>();
         for (const t of allTickets) {
             if (!t.assigneeId) continue;
@@ -69,8 +71,11 @@ export async function GET(request: Request) {
             if (arr) arr.push(t);
             else ticketsByDev.set(t.assigneeId, [t]);
 
-            if (t.importPeriod && selectedPeriodLabels.has(t.importPeriod)) {
-                periodAssigneeIds.add(t.assigneeId);
+            for (const label of selectedPeriodLabels) {
+                if (isTicketActiveInPeriod(t, label)) {
+                    periodAssigneeIds.add(t.assigneeId);
+                    break;
+                }
             }
         }
 
@@ -136,8 +141,9 @@ export async function GET(request: Request) {
                 const totalCost = grossCost * (1 - globalMeetingRate);
                 if (totalCost <= 0) continue;
 
-                // O(1) lookup instead of O(n) filter; no open-ticket rollforward.
-                const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => t.importPeriod === imp.label);
+                // Tickets active in this payroll period (includes carry-forwards
+                // first imported in earlier months that are still open or just closed).
+                const devTickets = (ticketsByDev.get(dev.id) || []).filter(t => isTicketActiveInPeriod(t, imp.label));
 
                 // Use Applied SP (with fallbacks) to include 0-SP bugs/tasks
                 const totalPoints = devTickets.reduce((s, t) => s + appliedSP(t), 0);
