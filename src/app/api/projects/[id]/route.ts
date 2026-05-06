@@ -12,11 +12,28 @@ export async function GET(
             where: { id },
             include: {
                 tickets: {
-                    include: { assignee: true },
+                    select: {
+                        id: true,
+                        ticketId: true,
+                        issueType: true,
+                        summary: true,
+                        storyPoints: true,
+                        resolutionDate: true,
+                        assigneeId: true,
+                        assignee: { select: { id: true, name: true, role: true } },
+                    },
                     orderBy: { resolutionDate: 'desc' },
                 },
                 journalEntries: {
-                    include: { period: true },
+                    select: {
+                        id: true,
+                        entryType: true,
+                        debitAccount: true,
+                        creditAccount: true,
+                        amount: true,
+                        description: true,
+                        period: { select: { month: true, year: true } },
+                    },
                     orderBy: { createdAt: 'desc' },
                     take: 20,
                 },
@@ -27,26 +44,24 @@ export async function GET(
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
 
-        // Get unique developers for this project
-        const devIds = Array.from(new Set(project.tickets.filter((t) => t.assigneeId).map((t) => t.assigneeId as string)));
-        const developers = await prisma.developer.findMany({
-            where: { id: { in: devIds } },
-        });
-
-        // Calculate developer contribution
-        const devContributions = developers.map((dev) => {
-            const devTickets = project.tickets.filter((t) => t.assigneeId === dev.id);
-            const totalPoints = devTickets.reduce((s, t) => s + t.storyPoints, 0);
-            const storyPoints = devTickets.filter((t) => t.issueType === 'STORY').reduce((s, t) => s + t.storyPoints, 0);
-            return {
-                id: dev.id,
-                name: dev.name,
-                role: dev.role,
-                ticketCount: devTickets.length,
-                totalPoints,
-                storyPoints,
+        // Calculate developer contribution from the tickets we already loaded — no second query needed
+        const byDev = new Map<string, { id: string; name: string; role: string; ticketCount: number; totalPoints: number; storyPoints: number }>();
+        for (const t of project.tickets) {
+            if (!t.assignee) continue;
+            const acc = byDev.get(t.assignee.id) ?? {
+                id: t.assignee.id,
+                name: t.assignee.name,
+                role: t.assignee.role,
+                ticketCount: 0,
+                totalPoints: 0,
+                storyPoints: 0,
             };
-        });
+            acc.ticketCount += 1;
+            acc.totalPoints += t.storyPoints;
+            if (t.issueType === 'STORY') acc.storyPoints += t.storyPoints;
+            byDev.set(t.assignee.id, acc);
+        }
+        const devContributions = Array.from(byDev.values());
 
         return NextResponse.json({
             ...project,

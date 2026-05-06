@@ -1,10 +1,16 @@
 export const dynamic = "force-dynamic";
 import { NextResponse, type NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth';
 import { handleApiError, validatePassword } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { CreateUserSchema, AdminUpdateSchema, formatZodError } from '@/lib/validations';
+
+const CACHED_CONFIG_KEYS: Record<string, string> = {
+    COMPANY_LOGO: '/api/config/logo',
+    FISCAL_YEAR_START_MONTH: '/api/config/fiscal-year',
+};
 
 
 const DEFAULT_ROLES = [
@@ -72,6 +78,8 @@ export async function PUT(req: NextRequest) {
                 create: { key: body.key, value: String(body.value), label: body.label || body.key },
                 update: { value: String(body.value) },
             });
+            const path = CACHED_CONFIG_KEYS[body.key];
+            if (path) revalidatePath(path);
         } else if (body.type === 'roles_array') {
             await prisma.globalConfig.upsert({
                 where: { key: 'ACCESS_ROLES' },

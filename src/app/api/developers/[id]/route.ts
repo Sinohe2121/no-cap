@@ -13,13 +13,34 @@ export async function GET(
         const [developer, bugSpConfig, otherSpConfig] = await Promise.all([
             prisma.developer.findUnique({
                 where: { id },
-                include: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    jiraUserId: true,
+                    role: true,
+                    monthlySalary: true,
+                    fringeBenefitRate: true,
+                    stockCompAllocation: true,
+                    isActive: true,
                     tickets: {
-                        include: { project: { select: { id: true, name: true, epicKey: true, status: true, isCapitalizable: true } } },
+                        select: {
+                            id: true,
+                            ticketId: true,
+                            issueType: true,
+                            summary: true,
+                            storyPoints: true,
+                            resolutionDate: true,
+                            project: { select: { id: true, name: true, epicKey: true, status: true, isCapitalizable: true } },
+                        },
                         orderBy: { resolutionDate: 'desc' },
                     },
                     payrollEntries: {
-                        include: { payrollImport: { select: { payDate: true, fringeBenefitRate: true } } },
+                        select: {
+                            grossSalary: true,
+                            sbcAmount: true,
+                            payrollImport: { select: { fringeBenefitRate: true } },
+                        },
                     },
                 },
             }),

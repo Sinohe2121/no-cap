@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 export type PeriodPreset = 'current_month' | 'last_month' | 'ytd' | 'last_fiscal_year' | 'all_time' | 'custom';
 
@@ -216,33 +216,38 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
         persist(preset, start, end);
     }, [preset, persist]);
 
-    const { range, label } = computeRange(preset, customStart, customEnd, fyStartMonth, periodBounds);
-
     // IMPORTANT: use local date parts — toISOString() converts to UTC first,
     // which shifts dates for users in negative-offset timezones (e.g. UTC-7
     // turns Jan 31 23:59 local → Feb 1 UTC, adding a spurious extra month).
-    const toISO = (d: Date) => {
-        const y = d.getFullYear();
-        const mo = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${mo}-${day}`;
-    };
-    const apiParams = `start=${toISO(range.start)}&end=${toISO(range.end)}`;
+    const { range, label, apiParams } = useMemo(() => {
+        const { range, label } = computeRange(preset, customStart, customEnd, fyStartMonth, periodBounds);
+        const toISO = (d: Date) => {
+            const y = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${mo}-${day}`;
+        };
+        const apiParams = `start=${toISO(range.start)}&end=${toISO(range.end)}`;
+        return { range, label, apiParams };
+    }, [preset, customStart, customEnd, fyStartMonth, periodBounds]);
 
-    // Build FY quarters based on current FY start
-    const { fyStart } = currentFyBounds(fyStartMonth, new Date());
-    const fyQuarters = buildFyQuarters(fyStart);
+    const fyQuarters = useMemo(() => {
+        const { fyStart } = currentFyBounds(fyStartMonth, new Date());
+        return buildFyQuarters(fyStart);
+    }, [fyStartMonth]);
+
+    const value = useMemo(() => ({
+        preset, customStart, customEnd,
+        range, label,
+        fyStartMonth,
+        periodBounds,
+        setPreset, setCustomDates,
+        apiParams,
+        fyQuarters,
+    }), [preset, customStart, customEnd, range, label, fyStartMonth, periodBounds, setPreset, setCustomDates, apiParams, fyQuarters]);
 
     return (
-        <PeriodContext.Provider value={{
-            preset, customStart, customEnd,
-            range, label,
-            fyStartMonth,
-            periodBounds,
-            setPreset, setCustomDates,
-            apiParams,
-            fyQuarters,
-        }}>
+        <PeriodContext.Provider value={value}>
             {children}
         </PeriodContext.Provider>
     );
