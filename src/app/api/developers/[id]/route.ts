@@ -6,12 +6,13 @@ import { PatchDeveloperSchema, formatZodError } from '@/lib/validations';
 
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const [developer, bugSpConfig, otherSpConfig] = await Promise.all([
             prisma.developer.findUnique({
-                where: { id: params.id },
+                where: { id },
                 include: {
                     tickets: {
                         include: { project: { select: { id: true, name: true, epicKey: true, status: true, isCapitalizable: true } } },
@@ -85,9 +86,10 @@ export async function GET(
 
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const auth = await requireAdmin(request);
         if (auth instanceof NextResponse) return auth;
 
@@ -99,7 +101,7 @@ export async function PATCH(
         const { name, email, jiraUserId, role, monthlySalary, stockCompAllocation, fringeBenefitRate, isActive } = parsed.data;
 
         const updated = await prisma.developer.update({
-            where: { id: params.id },
+            where: { id },
             data: {
                 ...(name !== undefined && { name }),
                 ...(email !== undefined && { email }),

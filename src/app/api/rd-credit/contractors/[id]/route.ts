@@ -4,8 +4,9 @@ import { requireAdmin } from '@/lib/auth';
 import { handleApiError } from '@/lib/apiError';
 import prisma from '@/lib/prisma';
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const auth = await requireAdmin(request);
         if (auth instanceof NextResponse) return auth;
 
@@ -13,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         const { vendor, description, amount, qrePct, period, year } = body;
 
         const entry = await prisma.contractResearch.update({
-            where: { id: params.id },
+            where: { id },
             data: {
                 ...(vendor != null && { vendor }),
                 ...(description !== undefined && { description }),
@@ -30,12 +31,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const { id } = await params;
         const auth = await requireAdmin(request);
         if (auth instanceof NextResponse) return auth;
 
-        await prisma.contractResearch.delete({ where: { id: params.id } });
+        await prisma.contractResearch.delete({ where: { id } });
         return NextResponse.json({ ok: true });
     } catch (error) {
         return handleApiError(error, 'Failed to delete contract research entry');

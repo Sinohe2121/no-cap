@@ -12,13 +12,14 @@ import { requireAuth } from '@/lib/auth';
  */
 export async function GET(
     request: Request,
-    { params }: { params: { key: string } }
+    { params }: { params: Promise<{ key: string }> }
 ) {
     try {
+        const { key } = await params;
         const auth = await requireAuth(request);
         if (auth instanceof NextResponse) return auth;
 
-        const issueKey = params.key.toUpperCase();
+        const issueKey = key.toUpperCase();
         if (!issueKey || !/^[A-Z]+-\d+$/.test(issueKey)) {
             return NextResponse.json({ error: 'Invalid ticket key format' }, { status: 400 });
         }

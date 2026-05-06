@@ -16,11 +16,12 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
  */
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const project = await prisma.project.findUnique({
-            where: { id: params.id },
+            where: { id },
             include: {
                 amortOverrides: true,
                 tickets: {
@@ -182,9 +183,10 @@ export async function GET(
  */
 export async function PUT(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const auth = await requireAdmin(request);
         if (auth instanceof NextResponse) return auth;
 
@@ -198,7 +200,7 @@ export async function PUT(
         // Reset all overrides
         if ('reset' in body && body.reset) {
             await prisma.amortizationOverride.deleteMany({
-                where: { projectId: params.id },
+                where: { projectId: id },
             });
             return NextResponse.json({ ok: true, cleared: true });
         }
@@ -210,14 +212,14 @@ export async function PUT(
             await prisma.amortizationOverride.upsert({
                 where: {
                     projectId_month_year: {
-                        projectId: params.id,
+                        projectId: id,
                         month: ov.month,
                         year: ov.year,
                     },
                 },
                 update: { charge: ov.charge },
                 create: {
-                    projectId: params.id,
+                    projectId: id,
                     month: ov.month,
                     year: ov.year,
                     charge: ov.charge,

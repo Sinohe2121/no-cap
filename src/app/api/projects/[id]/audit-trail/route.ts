@@ -9,14 +9,15 @@ import prisma from '@/lib/prisma';
  */
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const { id } = await params;
         const auth = await requireAuth(request);
         if (auth instanceof NextResponse) return auth;
 
         const entries = await prisma.journalEntry.findMany({
-            where: { projectId: params.id },
+            where: { projectId: id },
             include: {
                 period: { select: { month: true, year: true, status: true } },
             },
