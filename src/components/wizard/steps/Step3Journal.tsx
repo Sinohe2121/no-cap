@@ -30,12 +30,15 @@ function fmtUSD(n: number) {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n);
 }
 
+type MissingInput = 'payroll' | 'tickets';
+
 export default function Step3Journal() {
     const { period, goTo, markCompleted, close, cancel } = useWizard();
     const [generating, setGenerating] = useState(false);
     const [committed, setCommitted] = useState(false);
     const [data, setData] = useState<GenerateResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [missingInputs, setMissingInputs] = useState<MissingInput[]>([]);
     const [periodStatus, setPeriodStatus] = useState<'OPEN' | 'CLOSED' | 'NEW'>('NEW');
 
     useEffect(() => {
@@ -63,6 +66,7 @@ export default function Step3Journal() {
     const generate = async () => {
         setGenerating(true);
         setError(null);
+        setMissingInputs([]);
         try {
             const res = await fetch('/api/accounting', {
                 method: 'POST',
@@ -70,7 +74,14 @@ export default function Step3Journal() {
                 body: JSON.stringify({ month: period.month, year: period.year }),
             });
             const body = await res.json();
-            if (!res.ok) throw new Error(body.error || 'Generation failed');
+            if (!res.ok) {
+                if (body?.error === 'period_not_ready' && Array.isArray(body.missing)) {
+                    setMissingInputs(body.missing as MissingInput[]);
+                    setError(body.message || 'Period not ready for generation.');
+                    return;
+                }
+                throw new Error(body.message || body.error || 'Generation failed');
+            }
             setData(body as GenerateResponse);
             setCommitted(true);
             markCompleted('journal');
@@ -165,10 +176,36 @@ export default function Step3Journal() {
                 </div>
             )}
 
-            {error && (
+            {error && missingInputs.length === 0 && (
                 <div className="p-3 rounded-lg flex items-start gap-2 text-sm" style={{ background: '#FFF5F5', color: '#FA4338' }}>
                     <AlertTriangle className="w-4 h-4 mt-0.5" />
                     <span>{error}</span>
+                </div>
+            )}
+
+            {missingInputs.length > 0 && (
+                <div className="rounded-xl p-4" style={{ background: '#FFF8EE', border: '1px solid rgba(200,100,32,0.3)' }}>
+                    <div className="flex items-start gap-2 mb-2">
+                        <AlertTriangle className="w-4 h-4 mt-0.5" style={{ color: '#C86420' }} />
+                        <div className="flex-1">
+                            <p className="text-xs font-bold" style={{ color: '#C86420' }}>Period not ready</p>
+                            <p className="text-xs mt-0.5" style={{ color: '#5A4A1A' }}>
+                                {error ?? `Missing ${missingInputs.join(' and ')} for ${period.label}.`}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pl-6">
+                        {missingInputs.includes('payroll') && (
+                            <button onClick={() => goTo('payroll')} className="btn-ghost text-xs">
+                                <ArrowLeft className="w-3.5 h-3.5" /> Import payroll (Step 1)
+                            </button>
+                        )}
+                        {missingInputs.includes('tickets') && (
+                            <button onClick={() => goTo('jira')} className="btn-ghost text-xs">
+                                <ArrowLeft className="w-3.5 h-3.5" /> Import Jira tickets (Step 2)
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 

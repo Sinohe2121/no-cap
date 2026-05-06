@@ -80,6 +80,42 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Period is closed. Reopen it before generating entries.' }, { status: 409 });
         }
 
+        // ── Period readiness gate ───────────────────────────────────────
+        // The accounting calc is only valid when BOTH inputs exist for the
+        // period: payroll (who got paid, how much) and Jira tickets (what they
+        // worked on). Allocating payroll across stale or missing ticket data
+        // would invent capitalization that can't be defended in audit, so the
+        // generator refuses to run until both are present.
+        const periodStart = new Date(year, month - 1, 1);
+        const periodEnd = new Date(year, month, 0, 23, 59, 59);
+        const [payrollCount, ticketCount] = await Promise.all([
+            prisma.payrollImport.count({
+                where: { payDate: { gte: periodStart, lte: periodEnd } },
+            }),
+            prisma.jiraTicket.count({
+                where: {
+                    OR: [
+                        { resolutionDate: null },
+                        { resolutionDate: { gte: periodStart, lte: periodEnd } },
+                    ],
+                },
+            }),
+        ]);
+        const missing: ('payroll' | 'tickets')[] = [];
+        if (payrollCount === 0) missing.push('payroll');
+        if (ticketCount === 0) missing.push('tickets');
+        if (missing.length > 0) {
+            const human = missing.length === 2 ? 'payroll and Jira tickets' : missing[0] === 'payroll' ? 'payroll' : 'Jira tickets';
+            return NextResponse.json(
+                {
+                    error: 'period_not_ready',
+                    missing,
+                    message: `Period not ready — ${human} have not been imported for ${year}-${String(month).padStart(2, '0')}. Import them in the wizard's earlier steps before generating entries.`,
+                },
+                { status: 409 },
+            );
+        }
+
         if (!period) {
             period = await prisma.accountingPeriod.create({
                 data: { month, year, status: 'OPEN' },
