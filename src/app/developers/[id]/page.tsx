@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, Briefcase, DollarSign, GitBranch, Tag, Pencil, X, Check } from 'lucide-react';
 import { PIE_COLORS, TOOLTIP_STYLE } from '@/lib/chartColors';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 interface DevDetail {
     id: string;
@@ -362,7 +363,7 @@ export default function DeveloperDetailPage() {
                     <tbody>
                         {dev.tickets.map((ticket) => (
                             <tr key={ticket.id}>
-                                <td><span className="text-xs font-mono" style={{ color: '#4141A2' }}>{ticket.ticketId}</span></td>
+                                <td><JiraTicketLink ticketId={ticket.ticketId} className="text-xs" style={{ color: '#4141A2' }} /></td>
                                 <td className="text-xs" style={{ color: '#717684', whiteSpace: 'nowrap' }}>{ticket.project.name}</td>
                                 <td>
                                     <span className="badge" style={{

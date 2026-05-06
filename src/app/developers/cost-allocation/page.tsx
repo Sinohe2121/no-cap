@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, DollarSign, ChevronDown, ChevronRight, X, Filter } from 'lucide-react';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 interface DevInfo {
     id: string;
@@ -299,8 +300,8 @@ export default function CostAllocationPage() {
                                                         onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFBFC')}
                                                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                                                     >
-                                                        <td className="sticky left-0 z-10 px-3 py-2 font-mono font-medium whitespace-nowrap" style={{ color: '#4141A2', background: '#FFFFFF' }}>
-                                                            {ticket.ticketId}
+                                                        <td className="sticky left-0 z-10 px-3 py-2 whitespace-nowrap" style={{ background: '#FFFFFF' }}>
+                                                            <JiraTicketLink ticketId={ticket.ticketId} style={{ color: '#4141A2', fontWeight: 500 }} />
                                                         </td>
                                                         <td className="px-3 py-2 truncate max-w-[160px]" style={{ color: '#3F4450' }} title={ticket.projectName}>
                                                             <span className="font-medium">{ticket.projectName}</span>

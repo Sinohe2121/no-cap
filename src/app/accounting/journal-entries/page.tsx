@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, Calculator, FileDown, Search, X, DollarSign, TrendingDown, ClipboardList, ChevronDown, ChevronRight, Lock, Unlock, ArrowLeft, AlertTriangle, Hexagon, Square, Octagon, Triangle, Circle, Diamond } from 'lucide-react';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 interface Period {
     id: string;
@@ -734,7 +735,7 @@ export default function JournalEntriesPage() {
                                             {auditDetail.auditTrails.map((trail) => (
                                                 <tr key={trail.id} style={{ borderBottom: '1px solid #E2E4E9' }}>
                                                     <td className="px-4 py-2.5" style={{ color: '#3F4450' }}>{trail.developerName}</td>
-                                                    <td className="px-4 py-2.5"><span className="font-mono" style={{ color: '#4141A2' }}>{trail.ticketId}</span></td>
+                                                    <td className="px-4 py-2.5"><JiraTicketLink ticketId={trail.ticketId} style={{ color: '#4141A2' }} /></td>
                                                     <td className="px-4 py-2.5 max-w-[180px] truncate" style={{ color: '#717684' }}>{trail.jiraTicket.summary}</td>
                                                     <td className="px-4 py-2.5">
                                                         <span className="badge" style={{

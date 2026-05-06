@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 interface TicketData {
     id: string;
@@ -193,7 +194,7 @@ export default function ProjectDetailsPage() {
                                                             );
                                                         }
                                                         if (col.id === 'issuekey' && val) {
-                                                            return <td key={col.id}><span className="text-xs font-mono" style={{ color: '#4141A2' }}>{val}</span></td>
+                                                            return <td key={col.id}><JiraTicketLink ticketId={String(val)} className="text-xs" style={{ color: '#4141A2' }} /></td>
                                                         }
                                                         return (
                                                             <td key={col.id} className="text-sm max-w-[200px] truncate" title={val || ''}>

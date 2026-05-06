@@ -11,6 +11,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { PIE_COLORS, TOOLTIP_STYLE } from '@/lib/chartColors';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -586,7 +587,7 @@ function TicketsTab({ project }: { project: ProjectDetail }) {
                 <tbody>
                     {project.tickets.map(ticket => (
                         <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)} style={{ cursor: 'pointer' }}>
-                            <td><span className="text-xs font-mono" style={{ color: '#4141A2' }}>{ticket.ticketId}</span></td>
+                            <td><JiraTicketLink ticketId={ticket.ticketId} className="text-xs" style={{ color: '#4141A2' }} /></td>
                             <td>
                                 <span className="badge" style={{
                                     background: ticket.issueType === 'STORY' ? '#EBF5EF' : ticket.issueType === 'BUG' ? '#FFF5F5' : '#F0EAF8',

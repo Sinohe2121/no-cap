@@ -7,6 +7,7 @@ import {
     ChevronDown, Copy, Check, ExternalLink, RefreshCw,
     TrendingUp, DollarSign, FileText, X,
 } from 'lucide-react';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ function AuditPackTab({ periods }: { periods: { month: number; year: number; sta
                                                                     <p className="text-xs font-semibold mb-1.5" style={{ color: '#3F4450' }}>Supporting Tickets</p>
                                                                     <div className="flex flex-wrap gap-1.5">
                                                                         {entry.ticketIds.slice(0, 20).map((tid) => (
-                                                                            <span key={tid} className="badge text-[10px] font-mono" style={{ background: '#F6F6F9', color: '#717684' }}>{tid}</span>
+                                                                            <JiraTicketLink key={tid} ticketId={tid} className="badge text-[10px]" style={{ background: '#F6F6F9', color: '#717684' }} />
                                                                         ))}
                                                                         {entry.ticketIds.length > 20 && (
                                                                             <span className="badge text-[10px]" style={{ background: '#F6F6F9', color: '#A4A9B6' }}>+{entry.ticketIds.length - 20} more</span>

@@ -9,6 +9,7 @@ import { PeriodProvider } from '@/context/PeriodContext';
 import { WizardProvider } from '@/context/WizardContext';
 import NextPeriodWizard from '@/components/wizard/NextPeriodWizard';
 import ResumeWizardChip from '@/components/wizard/ResumeWizardChip';
+import { JiraTicketPanelProvider } from '@/components/JiraTicketPanel';
 
 const AUTH_ROUTES = ['/login', '/api/auth'];
 
@@ -26,20 +27,22 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <SessionProvider>
             <PeriodProvider>
                 <WizardProvider>
-                    <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)} />
-                    <GlobalSearch />
-                    <main
-                        className="main-content"
-                        style={{
-                            marginLeft,
-                            width: `calc(100% - ${marginLeft}px)`,
-                            transition: 'margin-left 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                        }}
-                    >
-                        {children}
-                    </main>
-                    <NextPeriodWizard />
-                    <ResumeWizardChip />
+                    <JiraTicketPanelProvider>
+                        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)} />
+                        <GlobalSearch />
+                        <main
+                            className="main-content"
+                            style={{
+                                marginLeft,
+                                width: `calc(100% - ${marginLeft}px)`,
+                                transition: 'margin-left 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                            }}
+                        >
+                            {children}
+                        </main>
+                        <NextPeriodWizard />
+                        <ResumeWizardChip />
+                    </JiraTicketPanelProvider>
                 </WizardProvider>
             </PeriodProvider>
         </SessionProvider>

@@ -8,6 +8,7 @@ import {
     CheckCircle2, AlertTriangle, Shield, ChevronDown, ChevronUp,
     Printer, BarChart2, X, GitBranch,
 } from 'lucide-react';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 interface DevSummary { name: string; tickets: number; points: number; amount: number; }
@@ -355,9 +356,7 @@ export default function AuditPackagePage() {
                                                 <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: '#717684' }}>Supporting Tickets</p>
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {entry.ticketIds.slice(0, 20).map(tid => (
-                                                        <span key={tid} className="badge text-[9px]" style={{ background: 'var(--tint-info)', color: 'var(--slate)' }}>
-                                                            {tid}
-                                                        </span>
+                                                        <JiraTicketLink key={tid} ticketId={tid} className="badge text-[9px]" style={{ background: 'var(--tint-info)', color: 'var(--slate)' }} />
                                                     ))}
                                                     {entry.ticketIds.length > 20 && (
                                                         <span className="text-[10px] font-semibold" style={{ color: '#A4A9B6' }}>

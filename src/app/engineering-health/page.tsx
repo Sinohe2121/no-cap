@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePeriod } from '@/context/PeriodContext';
 import { CHART_SEMANTIC, TOOLTIP_STYLE } from '@/lib/chartColors';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
     AreaChart, Area, CartesianGrid, Legend,
@@ -292,7 +293,7 @@ export default function EngineeringHealthPage() {
                             {topExpensiveTickets.map((t, i) => (
                                 <tr key={t.ticketId} style={{ borderBottom: '1px solid #F0F0F5' }}>
                                     <td className="py-2.5">
-                                        <span className="text-xs font-bold" style={{ color: 'var(--gem)' }}>{t.ticketId}</span>
+                                        <JiraTicketLink ticketId={t.ticketId} className="text-xs" style={{ color: 'var(--gem)', fontWeight: 700 }} />
                                     </td>
                                     <td className="py-2.5 pr-4" style={{ maxWidth: 260 }}>
                                         <span className="text-xs" style={{ color: '#3F4450' }}>{t.summary.length > 50 ? t.summary.slice(0, 50) + '…' : t.summary}</span>

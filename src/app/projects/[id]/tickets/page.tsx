@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Ticket, Bug, CheckSquare, ListTodo, Search, X, Calendar } from 'lucide-react';
-import { JiraTicketSlideOver } from '@/components/JiraTicketSlideOver';
+import { JiraTicketLink } from '@/components/JiraTicketPanel';
 
 interface Assignee {
     id: string;
@@ -82,7 +82,6 @@ export default function ProjectTicketsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('ALL');
     const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
-    const [selectedTicketKey, setSelectedTicketKey] = useState<string | null>(null);
 
     useEffect(() => {
         fetch(`/api/projects/${projectId}/tickets`)
@@ -300,28 +299,10 @@ export default function ProjectTicketsPage() {
                             return (
                                 <tr key={ticket.id} onClick={() => router.push(`/tickets/${ticket.id}`)} style={{ cursor: 'pointer' }}>
                                     <td>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedTicketKey(ticket.ticketId);
-                                            }}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                padding: 0,
-                                                cursor: 'pointer',
-                                                fontFamily: 'Menlo, Monaco, Courier New, monospace',
-                                                fontSize: 12,
-                                                fontWeight: 700,
-                                                color: '#4141A2',
-                                                textDecoration: 'underline',
-                                                textDecorationStyle: 'dotted',
-                                                textUnderlineOffset: 3,
-                                            }}
-                                            title="Preview in Jira"
-                                        >
-                                            {ticket.ticketId}
-                                        </button>
+                                        <JiraTicketLink
+                                            ticketId={ticket.ticketId}
+                                            style={{ fontSize: 12, fontWeight: 700, color: '#4141A2' }}
+                                        />
                                     </td>
                                     <td>
                                         <span
@@ -376,11 +357,6 @@ export default function ProjectTicketsPage() {
                 )}
             </div>
 
-            {/* Jira ticket preview slide-over */}
-            <JiraTicketSlideOver
-                ticketKey={selectedTicketKey}
-                onClose={() => setSelectedTicketKey(null)}
-            />
         </div>
     );
 }
