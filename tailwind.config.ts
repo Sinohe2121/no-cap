@@ -12,6 +12,10 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
       },
+      fontFamily: {
+        sans: ['Proxima Nova', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        mono: ['ui-monospace', '"SF Mono"', '"Roboto Mono"', 'Menlo', 'Consolas', 'monospace'],
+      },
     },
   },
   plugins: [],
