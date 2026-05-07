@@ -118,28 +118,28 @@ export default function TeamViewPage() {
             </div>
 
                 {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-                    <KPI icon={<FolderKanban className="w-4 h-4" />} label="Teams" value={summary.totalTeams.toString()} color="var(--gem)" />
-                    {/* Developers — 3-segment breakdown card */}
-                    <div className="glass-card p-4 flex flex-col gap-2" style={{ gridColumn: 'span 1' }}>
-                        <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#F5A62315', color: '#F5A623' }}>
-                                <Users className="w-4 h-4" />
-                            </div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Developers</span>
+                <div className="kpi-strip mb-6" style={{ flexWrap: 'wrap' }}>
+                    <KPI icon={<FolderKanban className="w-4 h-4" />} label="Teams" value={summary.totalTeams.toString()} color="var(--fg-1)" />
+                    {/* Developers — 3-segment breakdown cell */}
+                    <div className="kpi-cell" style={{ minWidth: 200 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <Users style={{ width: 14, height: 14, color: 'var(--fg-2)' }} />
+                            <span className="eyebrow">Developers</span>
                         </div>
-                        <span className="text-xl font-bold" style={{ color: 'var(--fg-1)' }}>{summary.totalPayrollDevs}</span>
-                        <div className="flex flex-col gap-1 mt-1">
+                        <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+                            {summary.totalPayrollDevs}
+                        </p>
+                        <div className="flex flex-col gap-1 mt-2">
                             {[
-                                { label: 'Closed', value: summary.closedTicketDevs, color: '#4141A2' },
-                                { label: 'Open', value: summary.openTicketDevs, color: '#F5A623' },
-                                { label: 'None', value: summary.noTicketDevs, color: '#E2E4E9' },
+                                { label: 'Closed', value: summary.closedTicketDevs, color: 'var(--envoy-cilantro)' },
+                                { label: 'Open', value: summary.openTicketDevs, color: 'var(--envoy-pistachio)' },
+                                { label: 'None', value: summary.noTicketDevs, color: 'var(--border-subtle)' },
                             ].map(row => {
                                 const pct = summary.totalPayrollDevs > 0 ? (row.value / summary.totalPayrollDevs) * 100 : 0;
                                 return (
                                     <div key={row.label} className="flex items-center gap-1.5">
                                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: row.color }} />
-                                        <div className="flex-1 h-[3px] rounded-full overflow-hidden" style={{ background: '#F0F0F5' }}>
+                                        <div className="flex-1 h-[3px] rounded-full overflow-hidden" style={{ background: 'var(--bg-surface-2)' }}>
                                             <div style={{ width: `${pct}%`, background: row.color, height: '100%', borderRadius: 999 }} />
                                         </div>
                                         <span className="text-[10px] font-bold tabular-nums" style={{ color: 'var(--fg-2)', minWidth: 14, textAlign: 'right' }}>{row.value}</span>
@@ -148,10 +148,10 @@ export default function TeamViewPage() {
                             })}
                         </div>
                     </div>
-                    <KPI icon={<BarChart2 className="w-4 h-4" />} label="Total SP" value={summary.totalSP.toLocaleString()} color="var(--gem)" />
-                    <KPI icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={fmtShort(summary.totalCost)} color="#FA4338" />
-                    <KPI icon={<TrendingUp className="w-4 h-4" />} label="Avg Cap Ratio" value={`${summary.avgCapRatio}%`} color="#21944E" />
-                    <KPI icon={<Bug className="w-4 h-4" />} label="Avg Bug Ratio" value={`${summary.avgBugRatio}%`} color="#FA4338" />
+                    <KPI icon={<BarChart2 className="w-4 h-4" />} label="Total SP" value={summary.totalSP.toLocaleString()} color="var(--fg-1)" />
+                    <KPI icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={fmtShort(summary.totalCost)} color="var(--envoy-red)" />
+                    <KPI icon={<TrendingUp className="w-4 h-4" />} label="Avg Cap Ratio" value={`${summary.avgCapRatio}%`} color="var(--envoy-cilantro)" />
+                    <KPI icon={<Bug className="w-4 h-4" />} label="Avg Bug Ratio" value={`${summary.avgBugRatio}%`} color="var(--envoy-red)" />
                 </div>
             )}
 
@@ -290,12 +290,16 @@ export default function TeamViewPage() {
 /* KPI Card */
 function KPI({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
     return (
-        <div className="glass-card p-4 flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}15`, color }}>{icon}</div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>{label}</span>
+        <div className="kpi-cell" style={{ minWidth: 160 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ display: 'inline-flex', width: 18, height: 18, alignItems: 'center', justifyContent: 'center', color: 'var(--fg-2)' }}>
+                    {icon}
+                </span>
+                <span className="eyebrow">{label}</span>
             </div>
-            <span className="text-xl font-bold" style={{ color: 'var(--fg-1)' }}>{value}</span>
+            <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+                {value}
+            </p>
         </div>
     );
 }
