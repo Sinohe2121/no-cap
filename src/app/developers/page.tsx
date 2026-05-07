@@ -347,7 +347,7 @@ export default function DevelopersDashboardPage() {
     if (loading) {
         return (
             <div className="flex flex-col flex-1 items-center justify-center p-20">
-                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 <span className="text-xs font-bold text-[#A4A9B6] uppercase tracking-widest mt-4">Synthesizing Hub...</span>
             </div>
         );

@@ -147,7 +147,7 @@ export default function RollForwardPage() {
     if (loading && !data) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
-                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
             </div>
         );
     }
@@ -265,7 +265,7 @@ export default function RollForwardPage() {
                 </div>
 
                 {loading && (
-                    <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ml-2" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ml-2" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 )}
 
                 <div className="ml-auto flex items-center gap-2 text-[11px] font-semibold" style={{ color: '#4141A2' }}>
