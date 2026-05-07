@@ -166,6 +166,19 @@ export default function ImportPeriodPage() {
         return columnFilteredTickets.filter(t => t.bucket === bucketFilter);
     }, [columnFilteredTickets, bucketFilter]);
 
+    // Detail rows for the "Unexpected carry-forward" audit panel — tickets
+    // Jira returned that weren't in our database as open at end of the prior
+    // period. Derived from columnFilteredTickets so the panel mirrors any
+    // column filter the user applies.
+    const filteredUnexpectedCF = useMemo(
+        () => columnFilteredTickets.filter(t => t.bucket === 'carryForwardUnexpected'),
+        [columnFilteredTickets],
+    );
+    const totalUnexpectedCF = useMemo(
+        () => previewTickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
+        [previewTickets],
+    );
+
     // Apply the same column filters to the missing-carry-forward audit panel
     // (using customFields persisted from the prior import) so the audit list
     // narrows alongside the trial-run table — letting the user drill into
@@ -479,6 +492,51 @@ export default function ImportPeriodPage() {
                     </Button>
                 </div>
             </Card>
+            )}
+
+            {/* Audit-B: tickets Jira returned that aren't in our DB as open at end of prior period.
+                These will be imported with an audit flag — surface them here so the user can drill in. */}
+            {!previewing && !importing && hasPreviewed && filteredUnexpectedCF.length > 0 && (
+                <Card className="p-5 mb-4 border-2" style={{ borderColor: '#F0B872', background: '#FFF4E0' }}>
+                    <div className="flex items-start gap-3 mb-3">
+                        <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#A85D00' }} />
+                        <div className="flex-1">
+                            <h3 className="font-semibold text-sm mb-1" style={{ color: '#A85D00' }}>
+                                {filteredUnexpectedCF.length} unexpected carry-forward{filteredUnexpectedCF.length === 1 ? '' : 's'} from Jira
+                                {filteredUnexpectedCF.length !== totalUnexpectedCF && (
+                                    <span className="font-normal" style={{ color: '#A85D00' }}> · {totalUnexpectedCF} before column filters</span>
+                                )}
+                            </h3>
+                            <p className="text-[12px]" style={{ color: '#7A4500' }}>
+                                These tickets came back from Jira's query for {getMonthLabel(month)} {year} but were <strong>not</strong> in our database as open at end of <strong>{previousPeriodLabel || 'the prior period'}</strong>. They were created earlier and should have been imported in a prior period — most likely the one shown in <em>Should have been imported</em>. They will be imported with an audit flag if you proceed.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="border rounded overflow-hidden bg-white" style={{ borderColor: '#F0CCA0', maxHeight: 320, overflowY: 'auto' }}>
+                        <table className="w-full text-xs">
+                            <thead style={{ background: '#FAFBFC', position: 'sticky', top: 0 }}>
+                                <tr>
+                                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Ticket</th>
+                                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Summary</th>
+                                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Assignee</th>
+                                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Should have been imported</th>
+                                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Resolution</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredUnexpectedCF.map(t => (
+                                    <tr key={t.ticketId} style={{ borderTop: '1px solid #F0CCA0' }}>
+                                        <td className="px-3 py-1.5"><JiraTicketLink ticketId={t.ticketId} className="text-xs" style={{ color: '#4141A2' }} /></td>
+                                        <td className="px-3 py-1.5 max-w-[280px] truncate" style={{ color: '#3F4450' }} title={t.summary || ''}>{t.summary || '—'}</td>
+                                        <td className="px-3 py-1.5" style={{ color: '#717684' }}>{t.assigneeName || '—'}</td>
+                                        <td className="px-3 py-1.5" style={{ color: '#717684' }}>{t.originPeriod || '—'}</td>
+                                        <td className="px-3 py-1.5" style={{ color: '#717684' }}>{t.resolutionDate ? new Date(t.resolutionDate).toLocaleDateString() : 'Open'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
             )}
 
             {/* Audit-A: tickets we expected to see as carry-forwards but Jira didn't return */}
