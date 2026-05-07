@@ -103,14 +103,6 @@ export default function ImportPeriodPage() {
         ? (month === 12 ? `${getMonthLabel(1)} ${year + 1}` : `${getMonthLabel(month + 1)} ${year}`)
         : '';
 
-    // Counts for the bucket-filter pills
-    const bucketCounts = useMemo(() => ({
-        all: previewTickets.length,
-        new: previewTickets.filter(t => t.bucket === 'new').length,
-        carryForwardMatched: previewTickets.filter(t => t.bucket === 'carryForwardMatched').length,
-        carryForwardUnexpected: previewTickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
-    }), [previewTickets]);
-
     // ── Date-aware column filtering ───────────────────────────────────────
     // Cells like "2026-02-27T23:18:32.564-0800" are unique per row, so the
     // generic unique-values filter is useless on them. Detect date-shaped
@@ -144,13 +136,13 @@ export default function ImportPeriodPage() {
         return raw;
     };
 
-    const filteredTickets = useMemo(() => {
-        let rows = previewTickets;
-        if (bucketFilter !== 'all') {
-            rows = rows.filter(t => t.bucket === bucketFilter);
-        }
-        if (Object.keys(columnFilters).length === 0) return rows;
-        return rows.filter(ticket => {
+    // Bucket pill counts and the visible table both derive from the
+    // column-filtered subset, so as the user narrows columns the
+    // "Unexpected carry-forward" pill drops to match what will actually
+    // be imported.
+    const columnFilteredTickets = useMemo(() => {
+        if (Object.keys(columnFilters).length === 0) return previewTickets;
+        return previewTickets.filter(ticket => {
             for (const [colName, allowedValues] of Object.entries(columnFilters)) {
                 const raw = (ticket.customFields?.[colName] || '(Blank)').toString();
                 const key = cellFilterKey(colName, raw);
@@ -159,7 +151,19 @@ export default function ImportPeriodPage() {
             return true;
         });
     // cellFilterKey closes over dateColumns, so listing it explicitly is enough
-    }, [previewTickets, bucketFilter, columnFilters, dateColumns]);
+    }, [previewTickets, columnFilters, dateColumns]);
+
+    const bucketCounts = useMemo(() => ({
+        all: columnFilteredTickets.length,
+        new: columnFilteredTickets.filter(t => t.bucket === 'new').length,
+        carryForwardMatched: columnFilteredTickets.filter(t => t.bucket === 'carryForwardMatched').length,
+        carryForwardUnexpected: columnFilteredTickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
+    }), [columnFilteredTickets]);
+
+    const filteredTickets = useMemo(() => {
+        if (bucketFilter === 'all') return columnFilteredTickets;
+        return columnFilteredTickets.filter(t => t.bucket === bucketFilter);
+    }, [columnFilteredTickets, bucketFilter]);
 
     const getUniqueValuesForCol = (colName: string): string[] => {
         const vals = new Set<string>();
