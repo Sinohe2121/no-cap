@@ -4,47 +4,176 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Envoy Color Palette ───────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────
+   Envoy Design System — Tokens
+   Source: design pack `let-s-redo-no-cap/project/nocap/envoy-tokens.css`
+   (Envoy Brand Palette, Jan 2026 + Envoy Branded Deck).
+
+   Strategy:
+     • New surfaces / new code SHOULD reference the new semantic tokens
+       (--fg-1, --bg-surface, --border-subtle, --space-4, --radius-md,
+       etc.) so future palette tweaks land in one place.
+     • Existing call-sites still using the legacy aliases (--red,
+       --carbon, --bg-card, --border-color, etc.) keep working — the
+       aliases are preserved at their original hex values so PR 1 ships
+       zero visual change. Component-level paint happens in later PRs.
+   ────────────────────────────────────────────────────────────────── */
 :root {
-  /* Essential */
-  --red: #FA4338;
-  --carbon: #3F4450;
-  --arctic: #F6F6F9;
-  --white: #FFFFFF;
+  /* ===== ESSENTIAL COLORS ============================================== */
+  --envoy-red:    #FA4338;  /* Primary brand — CTAs, active states, focus */
+  --envoy-carbon: #3F4450;  /* Primary text & dark surfaces */
+  --envoy-arctic: #F6F6F9;  /* Page background, subtle surfaces */
+  --envoy-white:  #FFFFFF;
 
-  /* Supporting */
-  --carbon-50: #717684;
-  --carbon-30: #A4A9B6;
-  --gem: #4141A2;
-  --cilantro: #21944E;
-  --powder: #B5DFEB;
-  --pistachio: #D3D236;
-  --garnet: #A00C1F;
-  --smoothie: #FFB0C5;
-  --amber: #F5A623;
-  --slate: #7FA8C8;
+  /* ===== SUPPORTING COLORS (use sparingly) ============================= */
+  --envoy-carbon-50: #717684; /* Secondary text, icons */
+  --envoy-carbon-30: #A4A9B6; /* Disabled, dividers, tertiary */
+  --envoy-gem:       #4141A2; /* Info accent (rare) */
+  --envoy-cilantro:  #21944E; /* Success */
+  --envoy-powder:    #B5DFEB; /* Info fill */
+  --envoy-pistachio: #D3D236; /* Warning-adjacent highlight */
+  --envoy-garnet:    #A00C1F; /* Critical / error */
+  --envoy-smoothie:  #FFB0C5; /* Soft accent */
 
-  /* Gem graduated shades */
+  /* ===== DERIVED NEUTRALS ============================================= */
+  --envoy-carbon-10: #E6E8ED;
+  --envoy-carbon-05: #F0F1F4;
+
+  /* ===== SEMANTIC — TEXT ============================================== */
+  --fg-1: var(--envoy-carbon);
+  --fg-2: var(--envoy-carbon-50);
+  --fg-3: var(--envoy-carbon-30);
+  --fg-on-red: var(--envoy-white);
+  --fg-on-dark: var(--envoy-white);
+  --fg-link: var(--envoy-red);
+  --fg-link-hover: #D9362D;
+
+  /* ===== SEMANTIC — SURFACES ========================================== */
+  --bg-surface:   var(--envoy-white);
+  --bg-surface-2: var(--envoy-carbon-05);
+  --bg-dark:      var(--envoy-carbon);
+  --bg-accent:    var(--envoy-red);
+  --bg-info:      var(--envoy-powder);
+
+  /* ===== SEMANTIC — BORDERS =========================================== */
+  --border-subtle:  var(--envoy-carbon-10);
+  --border-default: var(--envoy-carbon-30);
+  --border-strong:  var(--envoy-carbon-50);
+  --border-focus:   var(--envoy-red);
+
+  /* ===== SEMANTIC — STATUS ============================================ */
+  --status-success:    var(--envoy-cilantro);
+  --status-success-bg: #E3F3EA;
+  --status-error:      var(--envoy-garnet);
+  --status-error-bg:   #FADFE3;
+  --status-warning:    var(--envoy-pistachio);
+  --status-warning-bg: #F7F6D6;
+  --status-info:       var(--envoy-gem);
+  --status-info-bg:    var(--envoy-powder);
+
+  /* ===== TYPOGRAPHY — FAMILIES ========================================
+     PR 2 swaps Inter for self-hosted Proxima Nova by changing this
+     declaration only — every consumer that references --font-sans
+     follows automatically. */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont,
+               'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+
+  /* ===== TYPOGRAPHY — SCALE =========================================== */
+  --fs-display:  64px;
+  --fs-h1:       44px;
+  --fs-h2:       32px;
+  --fs-h3:       24px;
+  --fs-h4:       20px;
+  --fs-body-lg:  18px;
+  --fs-body:     16px;
+  --fs-body-sm:  14px;  /* Dense UI minimum per brand guide */
+  --fs-caption:  12px;
+  --fs-eyebrow:  12px;
+
+  --lh-tight:   1.1;
+  --lh-snug:    1.25;
+  --lh-normal:  1.5;
+  --lh-relaxed: 1.65;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-black:    800;
+
+  --ls-tight:   -0.02em;
+  --ls-normal:  0;
+  --ls-eyebrow: 0.08em;
+
+  /* ===== SPACING (4px base) =========================================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* ===== RADII ======================================================== */
+  --radius-sm:   4px;
+  --radius-md:   8px;   /* Default — buttons, inputs, cards */
+  --radius-lg:   12px;
+  --radius-xl:   20px;
+  --radius-pill: 999px;
+
+  /* ===== SHADOWS — soft, neutral, never colored ======================= */
+  --shadow-sm:    0 1px 2px rgba(63, 68, 80, 0.06), 0 1px 1px rgba(63, 68, 80, 0.04);
+  --shadow-md:    0 4px 12px rgba(63, 68, 80, 0.08), 0 1px 2px rgba(63, 68, 80, 0.05);
+  --shadow-lg:    0 12px 32px rgba(63, 68, 80, 0.12), 0 2px 6px rgba(63, 68, 80, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(250, 67, 56, 0.25);
+
+  /* ===== MOTION ======================================================= */
+  --ease-standard:   cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+
+  /* ===== LEGACY ALIASES ===============================================
+     Existing component CSS and inline styles still reference these. They
+     are pinned to their original hex values so PR 1 produces no visual
+     diff. Migrate consumers off these in later PRs and remove. */
+  --red:        #FA4338;
+  --carbon:     #3F4450;
+  --arctic:     #F6F6F9;
+  --white:      #FFFFFF;
+  --carbon-50:  #717684;
+  --carbon-30:  #A4A9B6;
+  --gem:        #4141A2;
+  --cilantro:   #21944E;
+  --powder:     #B5DFEB;
+  --pistachio:  #D3D236;
+  --garnet:     #A00C1F;
+  --smoothie:   #FFB0C5;
+  --amber:      #F5A623;  /* outside brand palette — kept for compat */
+  --slate:      #7FA8C8;  /* outside brand palette — kept for compat */
+
   --gem-60: #5D5DBC;
   --gem-40: #7878D6;
   --gem-20: #9494F0;
 
-  /* Badge tint backgrounds */
   --tint-success: #EBF5EF;
-  --tint-error: #FFF5F5;
+  --tint-error:   #FFF5F5;
   --tint-warning: #FFFBEB;
-  --tint-info: #E8F4F8;
-  --tint-accent: #F0EAF8;
+  --tint-info:    #E8F4F8;
+  --tint-accent:  #F0EAF8;
 
-  /* Semantic mappings */
-  --bg-page: var(--arctic);
-  --bg-card: var(--white);
-  --bg-sidebar: var(--carbon);
-  --border-color: #E2E4E9;
-  --border-hover: var(--carbon-30);
-  --text-primary: var(--carbon);
+  --bg-page:        var(--arctic);
+  --bg-card:        var(--white);
+  --bg-sidebar:     var(--carbon);  /* PR 3 flips to var(--bg-surface) */
+  --border-color:   #E2E4E9;        /* preserved exactly — design uses #E6E8ED */
+  --border-hover:   var(--carbon-30);
+  --text-primary:   var(--carbon);
   --text-secondary: var(--carbon-50);
-  --text-muted: var(--carbon-30);
+  --text-muted:     var(--carbon-30);
 }
 
 * {
