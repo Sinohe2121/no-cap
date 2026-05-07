@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { JiraTicketLink } from '@/components/JiraTicketPanel';
 import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
+import LoadingPanel from '@/components/wizard/LoadingPanel';
 
 function getLastDayOfMonth(year: number, month: number): number {
     return new Date(year, month, 0).getDate();
@@ -244,7 +245,42 @@ export default function ImportPeriodPage() {
                 <p className="section-subtext">Select a payroll period and import Jira tickets for capitalization.</p>
             </div>
 
+            {/* ── Loading overlay during preview / import ── */}
+            {previewing && (
+                <LoadingPanel
+                    title={`Fetching Jira tickets for ${getMonthLabel(month)} ${year}…`}
+                    subtitle="Large date ranges or busy Jira instances can take 30–90 seconds. You can leave this tab open — we'll keep working in the background."
+                    expectedSeconds={45}
+                    stages={[
+                        { at: 0,  label: 'Authenticating with Jira and loading custom-field config…' },
+                        { at: 4,  label: `Querying tickets active between ${startDate} and ${endDate} (resolved in period or still open at period end)…` },
+                        { at: 14, label: 'Paginating through Jira issues (100 per page)…' },
+                        { at: 28, label: 'Collecting the period import snapshot…' },
+                        { at: 45, label: rosterOnly ? 'Matching assignees against the payroll roster…' : 'Matching assignees to your developer list…' },
+                        { at: 60, label: 'Bucketing into new / carry-forward / unexpected and computing audit gaps…' },
+                        { at: 80, label: 'Almost there — finalizing the preview…' },
+                    ]}
+                />
+            )}
+
+            {importing && (
+                <LoadingPanel
+                    title={`Importing tickets for ${getMonthLabel(month)} ${year}…`}
+                    subtitle="Persisting tickets, refreshing carry-forwards, and recomputing per-ticket cost allocation."
+                    expectedSeconds={20}
+                    stages={[
+                        { at: 0,  label: 'Validating the selected ticket set…' },
+                        { at: 3,  label: 'Auto-creating any missing project rows from epic keys…' },
+                        { at: 7,  label: 'Inserting new tickets and refreshing carry-forwards in batches…' },
+                        { at: 14, label: 'Linking orphaned tickets back to their projects…' },
+                        { at: 20, label: 'Recomputing per-ticket cost allocation for the period…' },
+                        { at: 30, label: 'Wrapping up — clearing caches…' },
+                    ]}
+                />
+            )}
+
             {/* Import Criteria Card */}
+            {!previewing && !importing && (
             <Card className="p-6 mb-6 border-2" style={{ borderColor: '#E2E4E9' }}>
                 <h2 className="text-sm font-semibold mb-5 flex items-center gap-2" style={{ color: '#3F4450' }}>
                     <Calendar className="w-4 h-4" style={{ color: '#4141A2' }} /> Import Criteria
@@ -382,9 +418,10 @@ export default function ImportPeriodPage() {
                     </Button>
                 </div>
             </Card>
+            )}
 
             {/* Audit-A: tickets we expected to see as carry-forwards but Jira didn't return */}
-            {hasPreviewed && missingCarryForwards.length > 0 && (
+            {!previewing && !importing && hasPreviewed && missingCarryForwards.length > 0 && (
                 <Card className="p-5 mb-4 border-2" style={{ borderColor: '#F5C76A', background: '#FFFCEB' }}>
                     <div className="flex items-start gap-3 mb-3">
                         <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#D3A236' }} />
@@ -427,7 +464,7 @@ export default function ImportPeriodPage() {
             )}
 
             {/* Preview Results */}
-            {hasPreviewed && (
+            {!previewing && !importing && hasPreviewed && (
                 <div className="glass-card p-6 border shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
