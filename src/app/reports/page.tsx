@@ -193,18 +193,20 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
 
     return (
         <div>
-            {/* Summary strip */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            {/* KPI strip — divided cells, Variation A pattern */}
+            <div className="kpi-strip mb-6">
                 {[
-                    { label: 'Total Cost Basis', val: fmt(data.summary.totalCostBasis), color: '#3F4450' },
-                    { label: 'Net Book Value', val: fmt(data.summary.totalNBV), color: '#21944E' },
-                    { label: 'Accumulated Amort.', val: fmt(data.summary.totalAccumAmort), color: '#4141A2' },
-                    { label: 'Monthly Amort. Burn', val: fmt(data.summary.monthlyAmortBurn), color: '#FA4338' },
-                    { label: 'Avg. Useful Life', val: `${data.summary.averageUsefulLife} mo`, color: '#3F4450' },
+                    { label: 'Total Cost Basis', val: fmt(data.summary.totalCostBasis), color: 'var(--fg-1)' },
+                    { label: 'Net Book Value', val: fmt(data.summary.totalNBV), color: 'var(--envoy-cilantro)' },
+                    { label: 'Accumulated Amort.', val: fmt(data.summary.totalAccumAmort), color: 'var(--fg-1)' },
+                    { label: 'Monthly Amort. Burn', val: fmt(data.summary.monthlyAmortBurn), color: 'var(--envoy-red)' },
+                    { label: 'Avg. Useful Life', val: `${data.summary.averageUsefulLife} mo`, color: 'var(--fg-1)' },
                 ].map((c) => (
-                    <div key={c.label} className="glass-card p-4">
-                        <p className="text-xs mb-1" style={{ color: '#A4A9B6' }}>{c.label}</p>
-                        <p className="text-lg font-bold" style={{ color: c.color }}>{c.val}</p>
+                    <div key={c.label} className="kpi-cell">
+                        <p className="eyebrow">{c.label}</p>
+                        <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: c.color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+                            {c.val}
+                        </p>
                     </div>
                 ))}
             </div>
@@ -782,29 +784,28 @@ export default function ReportsPage() {
 
     return (
         <div>
-            {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-1">
-                    <BarChart2 className="w-6 h-6" style={{ color: '#4141A2' }} />
-                    <h1 className="section-header" style={{ marginBottom: 0 }}>Reports & Planning</h1>
-                </div>
-                <p className="section-subtext">R&D investment portfolio, amortization schedules, forecasting, and budget tracking</p>
+            {/* Header — eyebrow + h1 + description per Variation A title pattern */}
+            <div className="mb-6">
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    Reports & Planning
+                </p>
+                <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Capitalized R&D portfolio
+                </h1>
+                <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 640 }}>
+                    Cost basis, amortization, and forward-looking schedule for every internal-use software asset under ASC 350-40.
+                </p>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 p-1 rounded-xl mb-6" style={{ background: '#F6F6F9', width: 'fit-content', flexWrap: 'wrap' }}>
+            {/* Underline tabs — Variation A pattern */}
+            <div className="tab-row mb-6">
                 {TABS.map((tab) => {
                     const isActive = activeTab === tab.id;
                     return (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                            style={{
-                                background: isActive ? '#FFFFFF' : 'transparent',
-                                color: isActive ? '#3F4450' : '#A4A9B6',
-                                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                            }}
+                            className={`tab${isActive ? ' active' : ''}`}
                         >
                             <tab.icon className="w-4 h-4" />
                             {tab.label}
