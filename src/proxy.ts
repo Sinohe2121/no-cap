@@ -78,7 +78,10 @@ export const config = {
          * - /api/auth/**  (NextAuth own endpoints)
          * - /api/webhooks/** (GitHub webhook — signature-verified internally)
          * - Next.js internals (_next/*, favicon, public assets)
+         * - /fonts/**  (self-hosted Proxima Nova; needed on /login itself
+         *              before the user is authenticated, otherwise font
+         *              requests redirect to /login and never resolve)
          */
-        '/((?!login|api/auth|api/webhooks|api/config/logo|_next/static|_next/image|favicon.ico).*)',
+        '/((?!login|api/auth|api/webhooks|api/config/logo|_next/static|_next/image|favicon.ico|fonts/).*)',
     ],
 };
