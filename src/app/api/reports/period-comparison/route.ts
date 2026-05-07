@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { periodLabelsThrough } from '@/lib/periodTickets';
+import { periodLabelsThrough, getQualifyingPeriodLabels } from '@/lib/periodTickets';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
 
@@ -18,20 +18,24 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'All 4 period params required' }, { status: 400 });
         }
 
+        const qualifyingPeriods = await getQualifyingPeriodLabels();
+
         const computePeriod = async (startStr: string, endStr: string) => {
             const start = new Date(startStr + 'T00:00:00');
             const end   = new Date(endStr   + 'T23:59:59');
             const year  = start.getFullYear();
             const month = start.getMonth() + 1;
 
-            // Generate all importPeriod labels covering this range (e.g. ["January 2026", "February 2026"])
+            // Generate all importPeriod labels covering this range, then drop
+            // any month that doesn't have BOTH payroll and a Jira ticket
+            // import — otherwise we'd report "April" cost from a payroll-only
+            // month with no tickets imported there.
             const importPeriodLabels: string[] = [];
             const cursor = new Date(year, month - 1, 1);
             const endMonth = new Date(endStr + 'T00:00:00');
             while (cursor <= endMonth) {
-                importPeriodLabels.push(
-                    cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-                );
+                const label = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                if (qualifyingPeriods.has(label)) importPeriodLabels.push(label);
                 cursor.setMonth(cursor.getMonth() + 1);
             }
 

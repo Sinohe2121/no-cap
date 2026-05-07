@@ -12,6 +12,7 @@
 // in cost-allocation paths so carry-forwards stay in scope across periods.
 
 import { MONTH_NAMES, formatPeriodLabel } from './periodLabel';
+import prisma from './prisma';
 
 export interface ParsedPeriod {
     year: number;
@@ -118,4 +119,36 @@ export function isTicketActiveInPeriod(
  */
 export function expectedCarryForwardsWhere(priorLabel: string) {
     return activeInPeriodWhere(priorLabel);
+}
+
+/**
+ * Set of period labels that "qualify" for cost calculation and reporting:
+ * a label is included only when BOTH a payroll has been imported for that
+ * month AND at least one Jira ticket has been imported keyed to that period
+ * (importPeriod === label). Reports must skip non-qualifying periods —
+ * computing cost for a month with no ticket import produces phantom "April"
+ * numbers even though no tickets have been imported there.
+ *
+ * The check is on JiraTicket.importPeriod (first-seen) rather than active-in-
+ * period, because carry-forward tickets alone don't count: we want to confirm
+ * the user has actually run the import for that month.
+ */
+export async function getQualifyingPeriodLabels(): Promise<Set<string>> {
+    const [payrollRows, ticketRows] = await Promise.all([
+        prisma.payrollImport.findMany({
+            distinct: ['label'],
+            select: { label: true },
+        }),
+        prisma.jiraTicket.findMany({
+            where: { importPeriod: { not: null } },
+            distinct: ['importPeriod'],
+            select: { importPeriod: true },
+        }),
+    ]);
+    const ticketLabels = new Set(ticketRows.map(r => r.importPeriod!).filter(Boolean));
+    const out = new Set<string>();
+    for (const r of payrollRows) {
+        if (ticketLabels.has(r.label)) out.add(r.label);
+    }
+    return out;
 }

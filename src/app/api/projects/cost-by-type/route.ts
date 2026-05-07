@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
-import { isTicketActiveInPeriod } from '@/lib/periodTickets';
+import { isTicketActiveInPeriod, getQualifyingPeriodLabels } from '@/lib/periodTickets';
 
 /**
  * Returns monthly cost breakdown by ticket type (Story, Bug, Task, Epic, Subtask).
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         const endParam = searchParams.get('end') || searchParams.get('endDate');
 
         // ── Load configs and data in parallel ──
-        const [fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTicketsRaw, projects] = await Promise.all([
+        const [fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImportsRaw, allTicketsRaw, projects, qualifyingPeriods] = await Promise.all([
             prisma.globalConfig.findUnique({ where: { key: 'FRINGE_BENEFIT_RATE' } }),
             prisma.globalConfig.findUnique({ where: { key: 'MEETING_TIME_RATE' } }),
             prisma.globalConfig.findUnique({ where: { key: 'BUG_SP_FALLBACK' } }),
@@ -41,7 +41,11 @@ export async function GET(request: Request) {
                 },
             }),
             prisma.project.findMany({ select: { id: true, isCapitalizable: true } }),
+            getQualifyingPeriodLabels(),
         ]);
+
+        // Skip months that don't ALSO have a Jira ticket import.
+        const payrollImports = payrollImportsRaw.filter(p => qualifyingPeriods.has(p.label));
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
         const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;

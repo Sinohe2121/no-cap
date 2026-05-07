@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { isTicketActiveInPeriod } from '@/lib/periodTickets';
+import { isTicketActiveInPeriod, getQualifyingPeriodLabels } from '@/lib/periodTickets';
 
 export async function GET() {
     try {
@@ -20,8 +20,11 @@ export async function GET() {
             t.storyPoints > 0 ? t.storyPoints
                 : t.issueType === 'BUG' ? bugSpFallback : otherSpFallback;
 
-        // 2. Load payroll imports with entries + developer info
-        const payrollImports = await prisma.payrollImport.findMany({
+        // 2. Load payroll imports with entries + developer info, then keep
+        //    only periods that ALSO have a Jira ticket import (no phantom
+        //    months from payroll-only data).
+        const qualifyingPeriods = await getQualifyingPeriodLabels();
+        const payrollImports = (await prisma.payrollImport.findMany({
             orderBy: { payDate: 'desc' }, // newest first
             include: {
                 entries: {
@@ -31,7 +34,7 @@ export async function GET() {
                     },
                 },
             },
-        });
+        })).filter(p => qualifyingPeriods.has(p.label));
 
         // 3. Load all tickets with assignee + project (include 0-SP tickets — they use fallback Applied SP)
         const allTickets = await prisma.jiraTicket.findMany({

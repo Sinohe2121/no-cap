@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
-import { isTicketActiveInPeriod } from '@/lib/periodTickets';
+import { isTicketActiveInPeriod, getQualifyingPeriodLabels } from '@/lib/periodTickets';
 
 interface DevRow {
     id: string;
@@ -46,12 +46,17 @@ export async function GET() {
         });
 
         // ── 3. Load payroll imports with entries ──────────────────────
-        const payrollImports: PayrollImportRow[] = await prisma.payrollImport.findMany({
+        // Skip months that don't ALSO have a Jira import — a payroll-only
+        // month produces phantom "April" cost numbers when no tickets have
+        // been imported for April yet.
+        const qualifyingPeriods = await getQualifyingPeriodLabels();
+        const payrollImportsRaw: PayrollImportRow[] = await prisma.payrollImport.findMany({
             orderBy: { payDate: 'asc' },
             include: {
                 entries: { select: { developerId: true, grossSalary: true } },
             },
         });
+        const payrollImports = payrollImportsRaw.filter(p => qualifyingPeriods.has(p.label));
 
         // ── 4. Load all tickets with project info for distribution ───
         const allTickets = await prisma.jiraTicket.findMany({
