@@ -116,32 +116,37 @@ export default function TicketsPage() {
     return (
         <div>
             <div className="mb-4">
-                <Link href="/projects" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline transition-all hover:-translate-x-0.5" style={{ color: '#4141A2' }}>
+                <Link href="/projects" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline" style={{ color: 'var(--envoy-red)' }}>
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to Projects
                 </Link>
             </div>
-            <div className="mb-8">
-                <h1 className="section-header">Tickets Tracker</h1>
-                <p className="section-subtext">
+            <div className="mb-6">
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    Projects & Tickets
+                </p>
+                <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Tickets Tracker
+                </h1>
+                <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
                     {preset === 'all_time'
-                        ? <>All Jira tickets across projects — {tickets.length} total</>
+                        ? <>All Jira tickets across projects — {tickets.length} total.</>
                         : <>Showing tickets created in <strong>{periodLabel}</strong> — {tickets.length} match. Change the Reporting Period in the sidebar to widen the range.</>}
                 </p>
             </div>
             {preset !== 'all_time' && (
-                <div className="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#F0F0FA', color: '#4141A2', border: '1px solid #D9D9F0' }}>
+                <div className="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#FFEFEE', color: 'var(--envoy-red)', border: '1px solid rgba(250,67,56,0.2)' }}>
                     <Calendar className="w-3.5 h-3.5" />
                     <span>Filtered by <strong>{periodLabel}</strong> from the sidebar</span>
                 </div>
             )}
 
             {/* Tabs */}
-            <div className="flex items-center gap-1 mb-6 p-1 rounded-xl" style={{ background: '#F6F6F9', width: 'fit-content' }}>
+            <div className="flex items-center gap-1 mb-6 p-1 rounded-xl" style={{ background: 'var(--bg-page)', width: 'fit-content' }}>
                 <button
                     onClick={() => setTab('active')}
                     className="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
                     style={{
-                        background: tab === 'active' ? '#FFFFFF' : 'transparent',
+                        background: tab === 'active' ? 'var(--bg-surface)' : 'transparent',
                         color: tab === 'active' ? '#3F4450' : '#A4A9B6',
                         boxShadow: tab === 'active' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
                     }}
@@ -166,20 +171,20 @@ export default function TicketsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                     {/* Search */}
                     <div className="relative flex-1" style={{ minWidth: 240 }}>
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#A4A9B6' }} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--fg-3)' }} />
                         <input
                             type="text"
                             placeholder="Search by ticket ID, summary, assignee, or project..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="form-input"
-                            style={{ width: '100%', color: '#3F4450', fontSize: 13, paddingLeft: 36 }}
+                            style={{ width: '100%', color: 'var(--fg-1)', fontSize: 13, paddingLeft: 36 }}
                         />
                     </div>
 
                     {/* Type Filter */}
                     <div className="flex items-center gap-1.5">
-                        <Filter className="w-3.5 h-3.5" style={{ color: '#A4A9B6' }} />
+                        <Filter className="w-3.5 h-3.5" style={{ color: 'var(--fg-3)' }} />
                         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="form-select" style={{ width: 120 }}>
                             <option value="ALL">All Types</option>
                             <option value="STORY">Story</option>
@@ -240,16 +245,16 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="flex items-center gap-6 mt-3 pt-3" style={{ borderTop: '1px solid #E2E4E9' }}>
-                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                        <span className="font-semibold" style={{ color: '#3F4450' }}>{filtered.length}</span> tickets
+                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
+                        <span className="font-semibold" style={{ color: 'var(--fg-1)' }}>{filtered.length}</span> tickets
                     </span>
-                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                        Jira SP: <span className="font-semibold" style={{ color: '#717684' }}>{totalSP}</span>
+                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
+                        Jira SP: <span className="font-semibold" style={{ color: 'var(--fg-2)' }}>{totalSP}</span>
                     </span>
-                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
+                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
                         Applied SP: <span className="font-semibold" style={{ color: '#4141A2' }}>{totalAppliedSP}</span>
                     </span>
-                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
+                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
                         <span className="font-semibold" style={{ color: '#21944E' }}>{formatCurrency(totalCost)}</span> allocated cost
                     </span>
                 </div>
@@ -279,7 +284,7 @@ export default function TicketsPage() {
                         <tbody>
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={13} className="text-center" style={{ padding: '40px 0', color: '#A4A9B6' }}>
+                                    <td colSpan={13} className="text-center" style={{ padding: '40px 0', color: 'var(--fg-3)' }}>
                                         No tickets found
                                     </td>
                                 </tr>
@@ -295,7 +300,7 @@ export default function TicketsPage() {
                                             />
                                         </td>
                                         <td>
-                                            <span className="text-xs" style={{ color: '#3F4450', maxWidth: 320, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            <span className="text-xs" style={{ color: 'var(--fg-1)', maxWidth: 320, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {t.summary}
                                             </span>
                                         </td>
@@ -306,14 +311,14 @@ export default function TicketsPage() {
                                         </td>
                                         <td>
                                             {t.project ? (
-                                                <Link href={`/projects/${t.project.id}`} className="text-xs font-medium" style={{ color: '#717684', textDecoration: 'none' }}>
+                                                <Link href={`/projects/${t.project.id}`} className="text-xs font-medium" style={{ color: 'var(--fg-2)', textDecoration: 'none' }}>
                                                     {t.project.name}
                                                 </Link>
                                             ) : (
-                                                <span className="text-xs" style={{ color: '#A4A9B6' }}>—</span>
+                                                <span className="text-xs" style={{ color: 'var(--fg-3)' }}>—</span>
                                             )}
                                         </td>
-                                        <td className="text-xs" style={{ color: '#717684' }}>{t.assignee?.name || 'Unassigned'}</td>
+                                        <td className="text-xs" style={{ color: 'var(--fg-2)' }}>{t.assignee?.name || 'Unassigned'}</td>
                                         {/* Jira SP — raw from import */}
                                         <td className="text-right text-xs font-semibold" style={{ color: t.storyPoints > 0 ? '#3F4450' : '#A4A9B6' }}>
                                             {t.storyPoints}
@@ -345,10 +350,10 @@ export default function TicketsPage() {
                                         <td className="text-right text-xs font-semibold" style={{ color: t.allocatedCost > 0 ? '#21944E' : '#A4A9B6' }}>
                                             {t.allocatedCost > 0 ? formatCurrency(t.allocatedCost) : '—'}
                                         </td>
-                                        <td className="text-xs" style={{ color: '#717684' }}>
+                                        <td className="text-xs" style={{ color: 'var(--fg-2)' }}>
                                             {t.resolutionDate ? formatDate(t.resolutionDate) : '—'}
                                         </td>
-                                        <td className="text-xs" style={{ color: '#717684' }}>
+                                        <td className="text-xs" style={{ color: 'var(--fg-2)' }}>
                                             {t.resolutionDate ? (() => {
                                                 const rd = new Date(t.resolutionDate!);
                                                 const depStart = new Date(rd.getFullYear(), rd.getMonth() + 1, 1);
@@ -360,8 +365,8 @@ export default function TicketsPage() {
                                                 ? formatCurrency(t.allocatedCost / t.amortizationMonths)
                                                 : '—'}
                                         </td>
-                                        <td className="text-xs" style={{ color: '#A4A9B6' }}>{t.fixVersion || '—'}</td>
-                                        <td className="text-xs" style={{ color: '#A4A9B6' }}>{formatDate(t.customFields?.Created || t.createdAt)}</td>
+                                        <td className="text-xs" style={{ color: 'var(--fg-3)' }}>{t.fixVersion || '—'}</td>
+                                        <td className="text-xs" style={{ color: 'var(--fg-3)' }}>{formatDate(t.customFields?.Created || t.createdAt)}</td>
                                     </tr>
                                 );
                             })}

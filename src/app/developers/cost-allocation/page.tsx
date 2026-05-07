@@ -152,9 +152,9 @@ export default function CostAllocationPage() {
                     </Link>
                 </div>
                 <div className="glass-card p-12 text-center">
-                    <DollarSign className="w-12 h-12 mx-auto mb-4" style={{ color: '#A4A9B6' }} />
-                    <h2 className="text-lg font-semibold mb-2" style={{ color: '#3F4450' }}>No Cost Allocation Data</h2>
-                    <p className="text-sm" style={{ color: '#A4A9B6' }}>Import payroll periods first to see ticket-level cost allocations.</p>
+                    <DollarSign className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--fg-3)' }} />
+                    <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--fg-1)' }}>No Cost Allocation Data</h2>
+                    <p className="text-sm" style={{ color: 'var(--fg-3)' }}>Import payroll periods first to see ticket-level cost allocations.</p>
                 </div>
             </div>
         );
@@ -163,17 +163,24 @@ export default function CostAllocationPage() {
     return (
         <div>
             <div className="mb-4">
-                <Link href="/developers" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline transition-all hover:-translate-x-0.5" style={{ color: '#4141A2' }}>
+                <Link href="/developers" className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline" style={{ color: 'var(--envoy-red)' }}>
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to FTE &amp; Payroll
                 </Link>
             </div>
 
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-end justify-between mb-6">
                 <div>
-                    <h1 className="section-header">Ticket-Level Cost Allocation</h1>
-                    <p className="section-subtext">Story point–based allocation of fully loaded developer costs to individual tickets</p>
+                    <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                        Cost Allocation
+                    </p>
+                    <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                        Ticket-Level Cost Allocation
+                    </h1>
+                    <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
+                        Story point–based allocation of fully loaded developer costs to individual tickets.
+                    </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs" style={{ color: '#A4A9B6' }}>
+                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--fg-3)' }}>
                     <DollarSign className="w-4 h-4" />
                     <span>{data.periods.length} period{data.periods.length > 1 ? 's' : ''}</span>
                 </div>
@@ -198,10 +205,10 @@ export default function CostAllocationPage() {
                             >
                                 <div className="flex items-center gap-3">
                                     {isCollapsed
-                                        ? <ChevronRight className="w-4 h-4" style={{ color: '#A4A9B6' }} />
+                                        ? <ChevronRight className="w-4 h-4" style={{ color: 'var(--fg-3)' }} />
                                         : <ChevronDown className="w-4 h-4" style={{ color: '#4141A2' }} />
                                     }
-                                    <span className="text-sm font-bold" style={{ color: '#3F4450' }}>{period.label}</span>
+                                    <span className="text-sm font-bold" style={{ color: 'var(--fg-1)' }}>{period.label}</span>
                                     <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full" style={{ background: '#F0EAF8', color: '#4141A2' }}>
                                         {period.tickets.length} tickets
                                     </span>
@@ -209,7 +216,7 @@ export default function CostAllocationPage() {
                                         {devs.length} developers
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-4 text-xs" style={{ color: '#A4A9B6' }}>
+                                <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--fg-3)' }}>
                                     {activeFilter && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setAssigneeFilter(prev => ({ ...prev, [period.label]: null })); }}
@@ -223,7 +230,7 @@ export default function CostAllocationPage() {
                                         </button>
                                     )}
                                     <span>Allocated: <strong style={{ color: '#4141A2' }}>{formatCurrency(period.totalAllocated)}</strong></span>
-                                    <span>Total Loaded: <strong style={{ color: '#3F4450' }}>{formatCurrency(period.totalLoadedCost)}</strong></span>
+                                    <span>Total Loaded: <strong style={{ color: 'var(--fg-1)' }}>{formatCurrency(period.totalLoadedCost)}</strong></span>
                                 </div>
                             </button>
 
@@ -269,26 +276,26 @@ export default function CostAllocationPage() {
                                                         </th>
                                                     );
                                                 })}
-                                                <th className="px-3 py-2 text-right font-bold" style={{ color: '#3F4450', borderLeft: '2px solid #4141A2', minWidth: 90 }}>
+                                                <th className="px-3 py-2 text-right font-bold" style={{ color: 'var(--fg-1)', borderLeft: '2px solid #4141A2', minWidth: 90 }}>
                                                     Total
                                                 </th>
                                             </tr>
                                             {/* Sub-header row */}
                                             <tr style={{ borderBottom: '2px solid #E2E4E9', background: '#FAFBFC' }}>
-                                                <th className="sticky left-0 z-10 px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', background: '#FAFBFC', fontSize: 9 }}>Ticket</th>
-                                                <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Project</th>
-                                                <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Assignee</th>
-                                                <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>Jira SP</th>
+                                                <th className="sticky left-0 z-10 px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', background: '#FAFBFC', fontSize: 9 }}>Ticket</th>
+                                                <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: 9 }}>Project</th>
+                                                <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: 9 }}>Assignee</th>
+                                                <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: 9 }}>Jira SP</th>
                                                 <th className="px-3 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#4141A2', fontSize: 9 }}>Applied SP</th>
                                                 {devs.map((d) => (
                                                     <th key={`${d.id}-hdr`} colSpan={2} style={{ borderLeft: '2px solid #E2E4E9' }}>
                                                         <div className="flex">
-                                                            <span className="flex-1 px-2 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9 }}>%</span>
-                                                            <span className="flex-1 px-2 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', fontSize: 9, borderLeft: '1px solid #E2E4E9' }}>$</span>
+                                                            <span className="flex-1 px-2 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: 9 }}>%</span>
+                                                            <span className="flex-1 px-2 py-1.5 text-center font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', fontSize: 9, borderLeft: '1px solid #E2E4E9' }}>$</span>
                                                         </div>
                                                     </th>
                                                 ))}
-                                                <th className="px-3 py-1.5 text-right font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6', borderLeft: '2px solid #4141A2', fontSize: 9 }}>Allocated</th>
+                                                <th className="px-3 py-1.5 text-right font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)', borderLeft: '2px solid #4141A2', fontSize: 9 }}>Allocated</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -316,15 +323,15 @@ export default function CostAllocationPage() {
                                                                 )}
                                                             </div>
                                                         </td>
-                                                        <td className="px-3 py-2 truncate max-w-[160px]" style={{ color: '#3F4450' }} title={ticket.projectName}>
+                                                        <td className="px-3 py-2 truncate max-w-[160px]" style={{ color: 'var(--fg-1)' }} title={ticket.projectName}>
                                                             <span className="font-medium">{ticket.projectName}</span>
                                                             {ticket.isCapitalizable && (
                                                                 <span className="ml-1 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: '#EBF5EF', color: '#21944E' }}>CAP</span>
                                                             )}
                                                         </td>
-                                                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: '#717684' }}>{ticket.assigneeName}</td>
+                                                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--fg-2)' }}>{ticket.assigneeName}</td>
                                                         {/* Jira SP — raw value from Jira */}
-                                                        <td className="px-3 py-2 text-center tabular-nums" style={{ color: '#717684' }}>
+                                                        <td className="px-3 py-2 text-center tabular-nums" style={{ color: 'var(--fg-2)' }}>
                                                             {ticket.storyPoints > 0 ? ticket.storyPoints : '—'}
                                                         </td>
                                                         {/* Applied SP — used for cost allocation (includes BUG/OTHER fallbacks) */}
@@ -340,7 +347,7 @@ export default function CostAllocationPage() {
                                                                             <span className="flex-1 px-2 py-2 text-center tabular-nums font-medium" style={{ color: '#4141A2' }}>
                                                                                 {lrmPcts[period.label]?.[d.id]?.[ticket.id] || ''}
                                                                             </span>
-                                                                            <span className="flex-1 px-2 py-2 text-right tabular-nums font-semibold" style={{ color: '#3F4450', borderLeft: '1px solid #F0F0F4' }}>
+                                                                            <span className="flex-1 px-2 py-2 text-right tabular-nums font-semibold" style={{ color: 'var(--fg-1)', borderLeft: '1px solid #F0F0F4' }}>
                                                                                 {formatCurrency(alloc.amount)}
                                                                             </span>
                                                                         </div>
@@ -363,7 +370,7 @@ export default function CostAllocationPage() {
                                         {/* Footer totals */}
                                         <tfoot>
                                             <tr style={{ borderTop: '2px solid #E2E4E9', background: '#FAFBFC' }}>
-                                                <td colSpan={5} className="sticky left-0 z-10 px-3 py-3 font-bold" style={{ color: '#3F4450', background: '#FAFBFC' }}>
+                                                <td colSpan={5} className="sticky left-0 z-10 px-3 py-3 font-bold" style={{ color: 'var(--fg-1)', background: '#FAFBFC' }}>
                                                     Total
                                                 </td>
                                                 {devs.map((d) => {
@@ -380,7 +387,7 @@ export default function CostAllocationPage() {
                                             </tr>
                                             {period.unallocated > 0 && (
                                                 <tr style={{ borderTop: '1px solid #E2E4E9' }}>
-                                                    <td colSpan={5 + devs.length * 2} className="px-3 py-2 text-xs italic" style={{ color: '#A4A9B6' }}>
+                                                    <td colSpan={5 + devs.length * 2} className="px-3 py-2 text-xs italic" style={{ color: 'var(--fg-3)' }}>
                                                         Unallocated cost (developers with no tickets this period): {formatCurrency(period.unallocated)}
                                                     </td>
                                                     <td />
