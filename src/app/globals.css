@@ -1,8 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────────
+   Proxima Nova — Envoy brand font, self-hosted from /public/fonts/.
+   Six weights × normal+italic, woff2 with woff fallback. Weights
+   covered: 300 Light · 400 Regular · 600 Semibold · 700 Bold ·
+   800 Extrabold · 900 Black. The font has no native 500 — Tailwind's
+   font-medium falls back to 400 (closest), which matches the design
+   pack's behavior.
+   ────────────────────────────────────────────────────────────────── */
+@font-face { font-family: 'Proxima Nova'; font-weight: 300; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Light.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Light.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 300; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-LightIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-LightIt.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Regular.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Regular.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 400; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-RegularIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-RegularIt.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Semibold.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Semibold.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 600; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-SemiboldIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-SemiboldIt.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 700; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Bold.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Bold.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 700; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-BoldIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-BoldIt.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 800; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Extrabld.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Extrabld.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 800; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-ExtrabldIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-ExtrabldIt.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 900; font-style: normal; font-display: swap;
+  src: url('/fonts/ProximaNova-Black.woff2') format('woff2'),
+       url('/fonts/ProximaNova-Black.woff')  format('woff'); }
+@font-face { font-family: 'Proxima Nova'; font-weight: 900; font-style: italic; font-display: swap;
+  src: url('/fonts/ProximaNova-BlackIt.woff2') format('woff2'),
+       url('/fonts/ProximaNova-BlackIt.woff')  format('woff'); }
 
 /* ──────────────────────────────────────────────────────────────────
    Envoy Design System — Tokens
@@ -75,7 +118,7 @@
      PR 2 swaps Inter for self-hosted Proxima Nova by changing this
      declaration only — every consumer that references --font-sans
      follows automatically. */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont,
+  --font-sans: 'Proxima Nova', -apple-system, BlinkMacSystemFont,
                'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 
@@ -183,7 +226,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-page);
   color: var(--text-primary);
   min-height: 100vh;
@@ -586,7 +629,7 @@ body {
   border-radius: 10px;
   color: var(--text-primary);
   font-size: 14px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   transition: border-color 0.2s ease;
 }
 
@@ -619,7 +662,7 @@ body {
   border-radius: 10px;
   color: var(--text-primary);
   font-size: 14px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   cursor: pointer;
 }
 
