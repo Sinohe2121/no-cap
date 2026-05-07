@@ -100,10 +100,17 @@ export default function AccountingHubPage() {
 
     return (
         <div>
-            {/* ── Header ───────────────────────────────────────────────────────── */}
-            <div className="mb-8">
-                <h1 className="section-header" style={{ marginBottom: 4 }}>Accounting &amp; Reporting</h1>
-                <p className="section-subtext">Journal entry management and financial statement views</p>
+            {/* Header — eyebrow + h1 + description */}
+            <div className="mb-6">
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    Accounting & Reporting
+                </p>
+                <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Period Close & Books
+                </h1>
+                <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
+                    Journal entry management and financial statement views.
+                </p>
             </div>
 
             {/* ── Three main data cards ─────────────────────────────────────── */}
@@ -115,27 +122,27 @@ export default function AccountingHubPage() {
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EEF2FF' }}>
                             <Calculator className="w-4 h-4" style={{ color: '#4141A2' }} />
                         </div>
-                        <h2 className="text-base font-bold" style={{ color: '#3F4450' }}>Journal Entries</h2>
+                        <h2 className="text-base font-bold" style={{ color: 'var(--fg-1)' }}>Journal Entries</h2>
                     </div>
 
                     <div className="flex-1">
                         {loading ? (
                             <div className="flex items-center justify-center py-10">
-                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#A4A9B6' }} />
+                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--fg-3)' }} />
                             </div>
                         ) : (
                             <table className="w-full text-xs">
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid #E2E4E9' }}>
-                                        <th className="text-left pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Account</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Last Period</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>YTD</th>
+                                        <th className="text-left pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Account</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Last Period</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>YTD</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {plRows.length === 0 ? (
                                         <tr>
-                                            <td colSpan={3} className="py-8 text-center" style={{ color: '#A4A9B6' }}>
+                                            <td colSpan={3} className="py-8 text-center" style={{ color: 'var(--fg-3)' }}>
                                                 No entries for this period
                                             </td>
                                         </tr>
@@ -143,9 +150,9 @@ export default function AccountingHubPage() {
                                         const lastVal = row.values[row.values.length - 1] ?? 0;
                                         return (
                                             <tr key={row.account} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                                                <td className="py-3 pr-2" style={{ color: '#3F4450', fontWeight: row.bold ? 700 : 400 }}>{row.account}</td>
+                                                <td className="py-3 pr-2" style={{ color: 'var(--fg-1)', fontWeight: row.bold ? 700 : 400 }}>{row.account}</td>
                                                 <td className="py-3 text-right font-mono" style={{ color: row.color }}>{fmt(lastVal)}</td>
-                                                <td className="py-3 text-right font-mono" style={{ color: '#717684' }}>{fmt(row.total)}</td>
+                                                <td className="py-3 text-right font-mono" style={{ color: 'var(--fg-2)' }}>{fmt(row.total)}</td>
                                             </tr>
                                         );
                                     })}
@@ -169,27 +176,27 @@ export default function AccountingHubPage() {
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EBF5EF' }}>
                             <BarChart2 className="w-4 h-4" style={{ color: '#21944E' }} />
                         </div>
-                        <h2 className="text-base font-bold" style={{ color: '#3F4450' }}>Financial Reporting</h2>
+                        <h2 className="text-base font-bold" style={{ color: 'var(--fg-1)' }}>Financial Reporting</h2>
                     </div>
 
                     <div className="flex-1">
                         {loading ? (
                             <div className="flex items-center justify-center py-10">
-                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#A4A9B6' }} />
+                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--fg-3)' }} />
                             </div>
                         ) : (
                             <table className="w-full text-xs">
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid #E2E4E9' }}>
-                                        <th className="text-left pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Account</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Balance</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Period Δ</th>
+                                        <th className="text-left pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Account</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Balance</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Period Δ</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {bsRows.length === 0 ? (
                                         <tr>
-                                            <td colSpan={3} className="py-8 text-center" style={{ color: '#A4A9B6' }}>
+                                            <td colSpan={3} className="py-8 text-center" style={{ color: 'var(--fg-3)' }}>
                                                 No data for this period
                                             </td>
                                         </tr>
@@ -199,7 +206,7 @@ export default function AccountingHubPage() {
                                         const delta   = lastVal - prevVal;
                                         return (
                                             <tr key={row.account} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                                                <td className="py-3 pr-2" style={{ color: '#3F4450', fontWeight: row.bold ? 700 : 400 }}>{row.account}</td>
+                                                <td className="py-3 pr-2" style={{ color: 'var(--fg-1)', fontWeight: row.bold ? 700 : 400 }}>{row.account}</td>
                                                 <td className="py-3 text-right font-mono" style={{ color: row.bold ? '#4141A2' : '#3F4450', fontWeight: row.bold ? 700 : 400 }}>
                                                     {fmt(lastVal)}
                                                 </td>
@@ -229,29 +236,29 @@ export default function AccountingHubPage() {
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FFF4E6' }}>
                             <RefreshCw className="w-4 h-4" style={{ color: '#F5A623' }} />
                         </div>
-                        <h2 className="text-base font-bold" style={{ color: '#3F4450' }}>Roll-Forward Schedule</h2>
+                        <h2 className="text-base font-bold" style={{ color: 'var(--fg-1)' }}>Roll-Forward Schedule</h2>
                     </div>
 
                     <div className="flex-1 overflow-x-auto">
                         {loading ? (
                             <div className="flex items-center justify-center py-10">
-                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#A4A9B6' }} />
+                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--fg-3)' }} />
                             </div>
                         ) : (
                             <table className="w-full text-xs">
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid #E2E4E9' }}>
-                                        <th className="text-left pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Project</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Beg. NBV</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Add.</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>Amort.</th>
-                                        <th className="text-right pb-2.5 font-semibold" style={{ color: '#A4A9B6' }}>End NBV</th>
+                                        <th className="text-left pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Project</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Beg. NBV</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Add.</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>Amort.</th>
+                                        <th className="text-right pb-2.5 font-semibold" style={{ color: 'var(--fg-3)' }}>End NBV</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {rfProjects.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="py-8 text-center" style={{ color: '#A4A9B6' }}>
+                                            <td colSpan={5} className="py-8 text-center" style={{ color: 'var(--fg-3)' }}>
                                                 No activity for this period
                                             </td>
                                         </tr>
@@ -259,10 +266,10 @@ export default function AccountingHubPage() {
                                         <>
                                             {rfProjects.map(r => (
                                                 <tr key={r.project.id} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                                                    <td className="py-3 pr-1" style={{ color: '#3F4450', maxWidth: 80 }} title={r.project.name}>
+                                                    <td className="py-3 pr-1" style={{ color: 'var(--fg-1)', maxWidth: 80 }} title={r.project.name}>
                                                         {r.project.name.length > 14 ? r.project.name.slice(0, 14) + '…' : r.project.name}
                                                     </td>
-                                                    <td className="py-3 text-right font-mono" style={{ color: '#717684' }}>{fmt(r.beginningNBV)}</td>
+                                                    <td className="py-3 text-right font-mono" style={{ color: 'var(--fg-2)' }}>{fmt(r.beginningNBV)}</td>
                                                     <td className="py-3 text-right font-mono" style={{ color: '#21944E' }}>{fmt(r.periodCapitalized)}</td>
                                                     <td className="py-3 text-right font-mono" style={{ color: '#FA4338' }}>{fmt(r.periodAmortized)}</td>
                                                     <td className="py-3 text-right font-mono font-semibold" style={{ color: '#4141A2' }}>{fmt(r.endingNBV)}</td>
@@ -270,8 +277,8 @@ export default function AccountingHubPage() {
                                             ))}
                                             {rollData?.totals && (
                                                 <tr style={{ borderTop: '2px solid #E2E4E9' }}>
-                                                    <td className="pt-3 font-bold text-xs" style={{ color: '#3F4450' }}>Total</td>
-                                                    <td className="pt-3 text-right font-mono font-bold" style={{ color: '#717684' }}>{fmt(rollData.totals.beginningNBV)}</td>
+                                                    <td className="pt-3 font-bold text-xs" style={{ color: 'var(--fg-1)' }}>Total</td>
+                                                    <td className="pt-3 text-right font-mono font-bold" style={{ color: 'var(--fg-2)' }}>{fmt(rollData.totals.beginningNBV)}</td>
                                                     <td className="pt-3 text-right font-mono font-bold" style={{ color: '#21944E' }}>{fmt(rollData.totals.periodCapitalized)}</td>
                                                     <td className="pt-3 text-right font-mono font-bold" style={{ color: '#FA4338' }}>{fmt(rollData.totals.periodAmortized)}</td>
                                                     <td className="pt-3 text-right font-mono font-bold" style={{ color: '#4141A2' }}>{fmt(rollData.totals.endingNBV)}</td>
@@ -307,8 +314,8 @@ export default function AccountingHubPage() {
                                 >
                                     <Icon className="w-5 h-5" style={{ color: tool.iconColor }} />
                                 </div>
-                                <h3 className="text-sm font-bold mb-1.5" style={{ color: '#3F4450' }}>{tool.title}</h3>
-                                <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: '#A4A9B6' }}>{tool.description}</p>
+                                <h3 className="text-sm font-bold mb-1.5" style={{ color: 'var(--fg-1)' }}>{tool.title}</h3>
+                                <p className="text-xs leading-relaxed mb-4 flex-1" style={{ color: 'var(--fg-3)' }}>{tool.description}</p>
                                 <span className="text-xs font-semibold" style={{ color: tool.accentColor }}>Launch →</span>
                             </div>
                         </Link>
@@ -324,8 +331,8 @@ export default function AccountingHubPage() {
                             <ListFilter className="w-5 h-5" style={{ color: '#4141A2' }} />
                         </div>
                         <div>
-                            <h2 className="text-sm font-bold" style={{ color: '#3F4450' }}>Classification Rules</h2>
-                            <p className="text-xs mt-0.5" style={{ color: '#A4A9B6' }}>
+                            <h2 className="text-sm font-bold" style={{ color: 'var(--fg-1)' }}>Classification Rules</h2>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--fg-3)' }}>
                                 Priority-ordered rules that determine how each ticket is classified for capitalization
                             </p>
                         </div>
@@ -333,7 +340,7 @@ export default function AccountingHubPage() {
                     <div className="flex items-center gap-6">
                         <div className="text-right">
                             <p className="text-xl font-black" style={{ color: '#4141A2' }}>{rulesCount}</p>
-                            <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: '#A4A9B6' }}>Active Rules</p>
+                            <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--fg-3)' }}>Active Rules</p>
                         </div>
                         <span className="text-sm font-semibold" style={{ color: '#4141A2' }}>Manage →</span>
                     </div>

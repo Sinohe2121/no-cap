@@ -35,11 +35,11 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
     if (!active || !payload) return null;
     return (
         <div style={{ ...TOOLTIP_STYLE, padding: 12, minWidth: 180, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#3F4450', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg-1)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
             {payload.map((entry: { color: string; name: string; value: number }, i: number) => (
                 <div key={i} className="flex justify-between items-center gap-4" style={{ fontSize: 12 }}>
                     <span style={{ color: entry.color, fontWeight: 600 }}>{entry.name}</span>
-                    <span style={{ color: '#3F4450', fontWeight: 700 }}>{formatCurrency(entry.value)}</span>
+                    <span style={{ color: 'var(--fg-1)', fontWeight: 700 }}>{formatCurrency(entry.value)}</span>
                 </div>
             ))}
         </div>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
 
     if (!data || !data.summary) {
         return (
-            <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-[#717684]">
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-[var(--fg-2)]">
                 <p className="text-[14px] font-semibold">Failed to load dashboard data</p>
                 <button onClick={() => window.location.reload()} className="text-[13px] text-[#4141A2] font-bold hover:underline">
                     Retry
@@ -93,14 +93,16 @@ export default function DashboardPage() {
     const sparklineData = (data.chartData || []).slice(-6).map((d) => ({ ...d, total: d.capex + d.opex }));
 
     return (
-        <div className="text-[#3F4450]">
-            
-            {/* FinTech Header */}
-            <div className="flex items-end justify-between mb-6 pb-4 border-b border-[#E2E4E9]/60">
-                <div>
-                    <h1 className="text-[28px] font-black uppercase tracking-tight leading-none mb-1 text-[#3F4450]">Dashboard - {periodLabel}</h1>
-                    <p className="text-[13px] font-semibold text-[#A4A9B6] uppercase tracking-wider">ASC 350-40 Compliance Hub</p>
-                </div>
+        <div style={{ color: 'var(--fg-1)' }}>
+
+            {/* Header — eyebrow + h1 + description */}
+            <div className="mb-6 pb-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    ASC 350-40 Compliance Hub
+                </p>
+                <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Dashboard <span style={{ color: 'var(--fg-2)', fontWeight: 600 }}>· {periodLabel}</span>
+                </h1>
             </div>
 
             {/* Quick Pulse Strip */}
@@ -146,14 +148,14 @@ export default function DashboardPage() {
 
             {/* Performance Overview Row */}
             <div className="mb-8">
-                <h2 className="text-[12px] font-extrabold text-[#717684] tracking-widest mb-4 uppercase">Performance Overview</h2>
+                <h2 className="text-[12px] font-extrabold text-[var(--fg-2)] tracking-widest mb-4 uppercase">Performance Overview</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     
                     {/* KPI 1 — Total Spend Breakdown */}
                     <div className="fintech-card fintech-stat-block">
                         <div className="fintech-stat-label">
                             <span>Total Spend — {shortPeriodLabel}</span>
-                            <Activity className="w-4 h-4 text-[#A4A9B6]" />
+                            <Activity className="w-4 h-4 text-[var(--fg-3)]" />
                         </div>
                         <div className="fintech-stat-value">{formatCurrency(data.summary.periodPayrollNet)}</div>
                         {(() => {
@@ -162,7 +164,7 @@ export default function DashboardPage() {
                             const bugs = data.summary.totalBugCost;
                             const cap = data.summary.totalAssetValue;
                             const rows = [
-                                { label: 'Expensed', value: expensed, color: '#717684' },
+                                { label: 'Expensed', value: expensed, color: 'var(--fg-2)' },
                                 { label: 'Bug Costs', value: bugs, color: '#FA4338' },
                                 { label: 'Capitalized', value: cap, color: '#4141A2' },
                             ];
@@ -172,7 +174,7 @@ export default function DashboardPage() {
                                         const pct = total > 0 ? Math.round((row.value / total) * 100) : 0;
                                         return (
                                             <div key={row.label} className="flex items-center gap-2">
-                                                <span className="text-[9px] font-bold uppercase tracking-wider w-16 flex-shrink-0" style={{ color: '#A4A9B6' }}>{row.label}</span>
+                                                <span className="text-[9px] font-bold uppercase tracking-wider w-16 flex-shrink-0" style={{ color: 'var(--fg-3)' }}>{row.label}</span>
                                                 <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: '#EEF0F4' }}>
                                                     <div style={{ width: `${pct}%`, background: row.color, height: '100%', borderRadius: '999px', transition: 'width 0.4s ease' }} />
                                                 </div>
@@ -189,11 +191,11 @@ export default function DashboardPage() {
                     <div className="fintech-card fintech-stat-block">
                         <div className="fintech-stat-label">
                             <span>Amortization — {shortPeriodLabel}</span>
-                            <PieChart className="w-4 h-4 text-[#A4A9B6]" />
+                            <PieChart className="w-4 h-4 text-[var(--fg-3)]" />
                         </div>
                         <div className="fintech-stat-value">{formatCurrency(data.summary.ytdAmortization)}</div>
                         <div className="mt-auto flex items-end gap-3 h-[40px]">
-                            <div className="text-[11px] font-bold text-[#717684] bg-[#F6F6F9] px-2 py-0.5 rounded-md mb-1 flex-shrink-0">
+                            <div className="text-[11px] font-bold text-[var(--fg-2)] bg-[#F6F6F9] px-2 py-0.5 rounded-md mb-1 flex-shrink-0">
                                 Expensed
                             </div>
                         <div className="flex-1 h-full flex flex-col justify-end pb-2">
@@ -215,7 +217,7 @@ export default function DashboardPage() {
                     <div className="fintech-card fintech-stat-block" style={{ cursor: 'pointer', transition: 'box-shadow 0.15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(65,65,162,0.12)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
                         <div className="fintech-stat-label">
                             <span>Active Developers</span>
-                            <Users className="w-4 h-4 text-[#A4A9B6]" />
+                            <Users className="w-4 h-4 text-[var(--fg-3)]" />
                         </div>
                         <div className="fintech-stat-value">{data.summary.activeDeveloperCount}</div>
                         <div className="mt-auto flex items-end gap-3 h-[40px]">
@@ -245,7 +247,7 @@ export default function DashboardPage() {
                     <div className="fintech-card fintech-stat-block" style={{ cursor: 'pointer', transition: 'box-shadow 0.15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(65,65,162,0.12)'} onMouseLeave={e => e.currentTarget.style.boxShadow = ''}>
                         <div className="fintech-stat-label">
                             <span>Active Projects</span>
-                            <FolderKanban className="w-4 h-4 text-[#A4A9B6]" />
+                            <FolderKanban className="w-4 h-4 text-[var(--fg-3)]" />
                         </div>
                         <div className="fintech-stat-value">{data.summary.totalProjects}</div>
                         <div className="mt-auto flex items-end gap-3 h-[40px]">
@@ -271,14 +273,14 @@ export default function DashboardPage() {
                 <div className="fintech-card p-6">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase">Capex Investment Trends</h2>
-                            <p className="text-[12px] text-[#A4A9B6] mt-1">Capitalized Development vs Operational Expenses</p>
+                            <h2 className="text-[12px] font-extrabold text-[var(--fg-1)] tracking-widest uppercase">Capex Investment Trends</h2>
+                            <p className="text-[12px] text-[var(--fg-3)] mt-1">Capitalized Development vs Operational Expenses</p>
                         </div>
                         <div className="flex gap-4">
-                            <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#717684]">
+                            <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--fg-2)]">
                                 <div className="w-2 h-2 rounded-full bg-[#4141A2]" /> CAPEX
                             </span>
-                            <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#717684]">
+                            <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--fg-2)]">
                                 <div className="w-2 h-2 rounded-full bg-[#FA4338]" /> OPEX
                             </span>
                         </div>
@@ -327,8 +329,8 @@ export default function DashboardPage() {
                 {/* Capitalized Projects */}
                 <div className="fintech-card p-6 flex flex-col">
                     <div className="mb-4">
-                        <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase">Capitalized Projects</h2>
-                        <p className="text-[12px] text-[#A4A9B6] mt-1">Accumulated capitalized value by project</p>
+                        <h2 className="text-[12px] font-extrabold text-[var(--fg-1)] tracking-widest uppercase">Capitalized Projects</h2>
+                        <p className="text-[12px] text-[var(--fg-3)] mt-1">Accumulated capitalized value by project</p>
                     </div>
                     <div className="flex-1 mt-2">
                         <ResponsiveContainer width="100%" height={Math.max(260, data.topProjects.length * 42)}>
@@ -385,8 +387,8 @@ export default function DashboardPage() {
                 <div className="fintech-card p-6 mb-8">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase">Net Asset Value Development</h2>
-                            <p className="text-[12px] text-[#A4A9B6] mt-1">Capitalized buildup vs accumulated amortization</p>
+                            <h2 className="text-[12px] font-extrabold text-[var(--fg-1)] tracking-widest uppercase">Net Asset Value Development</h2>
+                            <p className="text-[12px] text-[var(--fg-3)] mt-1">Capitalized buildup vs accumulated amortization</p>
                         </div>
                     </div>
                     <div>
@@ -430,7 +432,7 @@ export default function DashboardPage() {
             {/* FinTech Alerts */}
             {data.alerts.length > 0 && (
                 <div className="fintech-card p-6">
-                    <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase mb-5 flex items-center gap-2">
+                    <h2 className="text-[12px] font-extrabold text-[var(--fg-1)] tracking-widest uppercase mb-5 flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-[#FA4338]" />
                         Action Register
                     </h2>
@@ -444,11 +446,11 @@ export default function DashboardPage() {
                                             <Badge style={{ background: isCritical ? '#FA4338' : '#F5A623', color: '#FFFFFF', fontSize: 10, padding: '2px 8px' }}>
                                                 {isCritical ? 'Critical' : 'Warning'}
                                             </Badge>
-                                            <span className="text-[12px] font-bold text-[#3F4450]">{alert.name}</span>
+                                            <span className="text-[12px] font-bold text-[var(--fg-1)]">{alert.name}</span>
                                         </div>
                                         <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 transform" style={{ color: isCritical ? '#FA4338' : '#F5A623' }} />
                                     </div>
-                                    <p className="text-[13px] text-[#A4A9B6] leading-snug">
+                                    <p className="text-[13px] text-[var(--fg-3)] leading-snug">
                                         {alert.message}
                                     </p>
                                 </Link>

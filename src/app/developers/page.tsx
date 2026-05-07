@@ -53,11 +53,11 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
     if (!active || !payload) return null;
     return (
         <div style={{ ...TOOLTIP_STYLE, padding: 10, minWidth: 140, boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#A4A9B6', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
             {payload.map((entry, i) => (
                 <div key={i} className="flex justify-between items-center gap-4" style={{ fontSize: 13 }}>
                     <span style={{ color: entry.color, fontWeight: 600 }}>{entry.name}</span>
-                    <span style={{ color: '#3F4450', fontWeight: 800 }}>
+                    <span style={{ color: 'var(--fg-1)', fontWeight: 800 }}>
                         {(() => {
                             const n = entry.name.toLowerCase();
                             if (n.includes('variance')) return `${entry.value.toFixed(1)}%`;
@@ -348,23 +348,25 @@ export default function DevelopersDashboardPage() {
         return (
             <div className="flex flex-col flex-1 items-center justify-center p-20">
                 <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
-                <span className="text-xs font-bold text-[#A4A9B6] uppercase tracking-widest mt-4">Synthesizing Hub...</span>
+                <span className="text-xs font-bold text-[var(--fg-3)] uppercase tracking-widest mt-4">Synthesizing Hub...</span>
             </div>
         );
     }
 
     return (
-        <div className="text-[#3F4450] pb-12">
+        <div className="text-[var(--fg-1)] pb-12">
             
-            <div className="flex items-start justify-between mb-8 pb-4 border-b border-[#E2E4E9]/60">
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FFF3E0' }}>
-                        <Users className="w-6 h-6" style={{ color: '#F5A623' }} />
-                    </div>
-                    <div>
-                        <h1 className="text-[28px] font-black uppercase tracking-tight leading-none mb-1 text-[#3F4450]">FTE & Payroll Summary</h1>
-                        <p className="text-[13px] font-semibold text-[#A4A9B6] uppercase tracking-wider">Capitalized developer compensation and allocation metrics</p>
-                    </div>
+            <div className="flex items-end justify-between mb-6 pb-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <div>
+                    <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                        People & Compensation
+                    </p>
+                    <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                        FTE & Payroll Summary
+                    </h1>
+                    <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
+                        Capitalized developer compensation and allocation metrics.
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-3 pt-2 flex-wrap">
@@ -387,10 +389,10 @@ export default function DevelopersDashboardPage() {
                 <div className="fintech-card p-6 flex flex-col justify-between" style={{ minHeight: '260px' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <h3 className="text-[12px] font-extrabold text-[#717684] tracking-widest uppercase mb-2">Average Cost per Ticket</h3>
+                            <h3 className="text-[12px] font-extrabold text-[var(--fg-2)] tracking-widest uppercase mb-2">Average Cost per Ticket</h3>
                             <div className="flex items-end gap-3">
-                                <span className="text-[32px] font-black text-[#3F4450] leading-none">{formatShortCurrency(latestAvgCost)}</span>
-                                <span className="text-[12px] font-bold text-[#A4A9B6] uppercase tracking-wider mb-1">Per Issue</span>
+                                <span className="text-[32px] font-black text-[var(--fg-1)] leading-none">{formatShortCurrency(latestAvgCost)}</span>
+                                <span className="text-[12px] font-bold text-[var(--fg-3)] uppercase tracking-wider mb-1">Per Issue</span>
                             </div>
                         </div>
                     </div>
@@ -411,10 +413,10 @@ export default function DevelopersDashboardPage() {
                 <div className="fintech-card p-6 flex flex-col justify-between" style={{ minHeight: '260px' }}>
                     <div className="flex justify-between items-start mb-4 relative z-10">
                         <div>
-                            <h3 className="text-[12px] font-extrabold text-[#717684] tracking-widest uppercase mb-2">Capex/Opex Ratio</h3>
+                            <h3 className="text-[12px] font-extrabold text-[var(--fg-2)] tracking-widest uppercase mb-2">Capex/Opex Ratio</h3>
                             <div className="flex items-end gap-3">
-                                <span className="text-[32px] font-black text-[#3F4450] leading-none">{capexRatio}% / {100 - capexRatio}%</span>
-                                <span className="text-[12px] font-bold text-[#A4A9B6] uppercase tracking-wider mb-1">Capitalized</span>
+                                <span className="text-[32px] font-black text-[var(--fg-1)] leading-none">{capexRatio}% / {100 - capexRatio}%</span>
+                                <span className="text-[12px] font-bold text-[var(--fg-3)] uppercase tracking-wider mb-1">Capitalized</span>
                             </div>
                         </div>
                     </div>
@@ -435,7 +437,7 @@ export default function DevelopersDashboardPage() {
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                             <span className="text-[28px] font-black text-[#4141A2] leading-none -ml-1">{capexRatio}%</span>
-                            <span className="text-[11px] font-extrabold text-[#A4A9B6] uppercase tracking-wider mt-1">Capex</span>
+                            <span className="text-[11px] font-extrabold text-[var(--fg-3)] uppercase tracking-wider mt-1">Capex</span>
                         </div>
                     </div>
                 </div>
@@ -444,10 +446,10 @@ export default function DevelopersDashboardPage() {
                 <div className="fintech-card p-6 flex flex-col justify-between" style={{ minHeight: '260px' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <h3 className="text-[12px] font-extrabold text-[#717684] tracking-widest uppercase mb-2">Month-over-Month Variance</h3>
+                            <h3 className="text-[12px] font-extrabold text-[var(--fg-2)] tracking-widest uppercase mb-2">Month-over-Month Variance</h3>
                             <div className="flex items-end gap-3">
-                                <span className="text-[32px] font-black text-[#3F4450] leading-none">{latestVariance > 0 ? '+' : ''}{latestVariance.toFixed(1)}%</span>
-                                <span className="text-[12px] font-bold text-[#A4A9B6] uppercase tracking-wider mb-1">vs Prior</span>
+                                <span className="text-[32px] font-black text-[var(--fg-1)] leading-none">{latestVariance > 0 ? '+' : ''}{latestVariance.toFixed(1)}%</span>
+                                <span className="text-[12px] font-bold text-[var(--fg-3)] uppercase tracking-wider mb-1">vs Prior</span>
                             </div>
                         </div>
                     </div>
@@ -469,10 +471,10 @@ export default function DevelopersDashboardPage() {
                 <div className="fintech-card p-6 flex flex-col justify-between" style={{ minHeight: '260px' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <h3 className="text-[12px] font-extrabold text-[#717684] tracking-widest uppercase mb-2">Active Headcount</h3>
+                            <h3 className="text-[12px] font-extrabold text-[var(--fg-2)] tracking-widest uppercase mb-2">Active Headcount</h3>
                             <div className="flex items-end gap-3">
-                                <span className="text-[32px] font-black text-[#3F4450] leading-none">{currentHeadcount}</span>
-                                <span className="text-[12px] font-bold text-[#A4A9B6] uppercase tracking-wider mb-1">Total FTEs</span>
+                                <span className="text-[32px] font-black text-[var(--fg-1)] leading-none">{currentHeadcount}</span>
+                                <span className="text-[12px] font-bold text-[var(--fg-3)] uppercase tracking-wider mb-1">Total FTEs</span>
                             </div>
                         </div>
                     </div>
@@ -509,10 +511,10 @@ export default function DevelopersDashboardPage() {
                     <div className="fintech-card p-6 mb-8">
                         <div className="flex justify-between items-center mb-5">
                             <div>
-                                <h2 className="text-[12px] font-extrabold text-[#3F4450] tracking-widest uppercase flex items-center gap-2">
+                                <h2 className="text-[12px] font-extrabold text-[var(--fg-1)] tracking-widest uppercase flex items-center gap-2">
                                     <Activity className="w-4 h-4 text-[#4141A2]" /> Developer Velocity
                                 </h2>
-                                <p className="text-[12px] text-[#A4A9B6] mt-1">Story points resolved per week — trailing 8-week trend · click to expand</p>
+                                <p className="text-[12px] text-[var(--fg-3)] mt-1">Story points resolved per week — trailing 8-week trend · click to expand</p>
                             </div>
                         </div>
 
@@ -537,7 +539,7 @@ export default function DevelopersDashboardPage() {
                                                 <ChevronDown
                                                     className="w-3.5 h-3.5 transition-transform flex-shrink-0"
                                                     style={{
-                                                        color: '#A4A9B6',
+                                                        color: 'var(--fg-3)',
                                                         transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                                                     }}
                                                 />
@@ -546,7 +548,7 @@ export default function DevelopersDashboardPage() {
                                                 <Link
                                                     href={`/developers/${v.devId}`}
                                                     className="w-40 text-[13px] font-semibold no-underline truncate"
-                                                    style={{ color: '#3F4450' }}
+                                                    style={{ color: 'var(--fg-1)' }}
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     {v.devName}
@@ -574,15 +576,15 @@ export default function DevelopersDashboardPage() {
 
                                                 {/* Total SP */}
                                                 <div className="w-20 text-right tabular-nums">
-                                                    <span className="text-[14px] font-bold" style={{ color: '#3F4450' }}>{formattedSP}</span>
-                                                    <span className="text-[10px] font-semibold ml-1" style={{ color: '#A4A9B6' }}>SP</span>
+                                                    <span className="text-[14px] font-bold" style={{ color: 'var(--fg-1)' }}>{formattedSP}</span>
+                                                    <span className="text-[10px] font-semibold ml-1" style={{ color: 'var(--fg-3)' }}>SP</span>
                                                 </div>
 
                                                 {/* Trend */}
                                                 <div className="w-8 flex justify-center">
                                                     {v.trend === 'up' && <ArrowRight className="w-3.5 h-3.5 -rotate-45" style={{ color: '#21944E' }} />}
                                                     {v.trend === 'down' && <ArrowRight className="w-3.5 h-3.5 rotate-45" style={{ color: '#FA4338' }} />}
-                                                    {v.trend === 'flat' && <ArrowRight className="w-3.5 h-3.5" style={{ color: '#A4A9B6' }} />}
+                                                    {v.trend === 'flat' && <ArrowRight className="w-3.5 h-3.5" style={{ color: 'var(--fg-3)' }} />}
                                                 </div>
                                             </div>
 
@@ -606,7 +608,7 @@ export default function DevelopersDashboardPage() {
 
                                                     {/* Role Badge */}
                                                     <div className="flex flex-col gap-1 flex-shrink-0">
-                                                        <span className="text-[13px] font-bold" style={{ color: '#3F4450' }}>{v.devName}</span>
+                                                        <span className="text-[13px] font-bold" style={{ color: 'var(--fg-1)' }}>{v.devName}</span>
                                                         <span
                                                             className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full w-fit"
                                                             style={{ background: '#E8E6F5', color: '#4141A2' }}
@@ -630,22 +632,22 @@ export default function DevelopersDashboardPage() {
                                                                 {v.capRatio}%
                                                             </text>
                                                         </svg>
-                                                        <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: '#A4A9B6' }}>Cap</span>
+                                                        <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: 'var(--fg-3)' }}>Cap</span>
                                                     </div>
 
                                                     {/* Metric Pills */}
                                                     <div className="flex gap-3 flex-1">
                                                         <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
-                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.ticketsResolved}</span>
-                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Tickets</span>
+                                                            <span className="text-[16px] font-black" style={{ color: 'var(--fg-1)' }}>{v.ticketsResolved}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Tickets</span>
                                                         </div>
                                                         <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
-                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.avgCycleTime > 0 ? `${v.avgCycleTime}d` : '—'}</span>
-                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Avg Cycle</span>
+                                                            <span className="text-[16px] font-black" style={{ color: 'var(--fg-1)' }}>{v.avgCycleTime > 0 ? `${v.avgCycleTime}d` : '—'}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Avg Cycle</span>
                                                         </div>
                                                         <div className="flex flex-col items-center px-4 py-2 rounded-lg" style={{ background: '#fff', border: '1px solid #EEF0F4' }}>
-                                                            <span className="text-[16px] font-black" style={{ color: '#3F4450' }}>{v.loadedCost > 0 ? formatShortCurrency(v.loadedCost) : '—'}</span>
-                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Loaded Cost</span>
+                                                            <span className="text-[16px] font-black" style={{ color: 'var(--fg-1)' }}>{v.loadedCost > 0 ? formatShortCurrency(v.loadedCost) : '—'}</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Loaded Cost</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -657,7 +659,7 @@ export default function DevelopersDashboardPage() {
 
                             {/* Right: Ticket Coverage Donut */}
                             <div className="flex flex-col items-center justify-start flex-shrink-0" style={{ width: 200 }}>
-                                <h3 className="text-[10px] font-extrabold text-[#A4A9B6] tracking-widest uppercase mb-3">Ticket Coverage</h3>
+                                <h3 className="text-[10px] font-extrabold text-[var(--fg-3)] tracking-widest uppercase mb-3">Ticket Coverage</h3>
                                 {(() => {
                                     const withTickets = velocityData.length; // resolved in period
                                     const withoutTickets = Math.max(0, currentHeadcount - withTickets - openTicketDevCount);
@@ -693,8 +695,8 @@ export default function DevelopersDashboardPage() {
                                                 </ResponsiveContainer>
                                                 {/* Center label */}
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                                    <span className="text-[22px] font-black leading-none" style={{ color: '#3F4450' }}>{currentHeadcount}</span>
-                                                    <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: '#A4A9B6' }}>Total FTEs</span>
+                                                    <span className="text-[22px] font-black leading-none" style={{ color: 'var(--fg-1)' }}>{currentHeadcount}</span>
+                                                    <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5" style={{ color: 'var(--fg-3)' }}>Total FTEs</span>
                                                 </div>
                                             </div>
                                             {/* Legend */}
@@ -703,20 +705,20 @@ export default function DevelopersDashboardPage() {
                                                     <div key={entry.name} className="flex items-center justify-between text-[11px]">
                                                         <span className="flex items-center gap-1.5">
                                                             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COVERAGE_COLORS[i] }} />
-                                                            <span className="font-semibold" style={{ color: '#3F4450' }}>{entry.name}</span>
+                                                            <span className="font-semibold" style={{ color: 'var(--fg-1)' }}>{entry.name}</span>
                                                         </span>
-                                                        <span className="font-bold" style={{ color: '#717684' }}>{entry.value}</span>
+                                                        <span className="font-bold" style={{ color: 'var(--fg-2)' }}>{entry.value}</span>
                                                     </div>
                                                 ))}
                                             </div>
                                             {/* Summary Stats */}
                                             <div className="mt-4 pt-3 border-t border-[#EEF0F4] w-full flex flex-col gap-2 px-2">
                                                 <div className="flex justify-between text-[10px]">
-                                                    <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Coverage</span>
+                                                    <span className="font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Coverage</span>
                                                     <span className="font-black" style={{ color: coveragePct >= 80 ? '#21944E' : '#F5A623' }}>{coveragePct}%</span>
                                                 </div>
                                                 <div className="flex justify-between text-[10px]">
-                                                    <span className="font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Top Performer</span>
+                                                    <span className="font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Top Performer</span>
                                                     <span className="font-black truncate ml-2" style={{ color: '#4141A2', maxWidth: 80 }}>{topPerformer.split(',')[0]}</span>
                                                 </div>
                                             </div>
@@ -727,13 +729,13 @@ export default function DevelopersDashboardPage() {
                         </div>
 
                         <div className="mt-4 pt-3 border-t border-[#F0F0F5] flex items-center justify-between">
-                            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
+                            <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>
                                 <span>Older ← → Recent</span>
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>
+                            <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>
                                 <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 -rotate-45" style={{ color: '#21944E' }} /> Accelerating</span>
                                 <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3 rotate-45" style={{ color: '#FA4338' }} /> Decelerating</span>
-                                <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3" style={{ color: '#A4A9B6' }} /> Steady</span>
+                                <span className="flex items-center gap-1"><ArrowRight className="w-3 h-3" style={{ color: 'var(--fg-3)' }} /> Steady</span>
                             </div>
                         </div>
                     </div>

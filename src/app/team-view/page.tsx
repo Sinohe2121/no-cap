@@ -101,18 +101,20 @@ export default function TeamViewPage() {
 
     return (
         <div>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <Link href="/developers" className="flex items-center gap-1 text-xs font-semibold mb-2 no-underline" style={{ color: 'var(--gem)' }}>
-                        <ArrowLeft className="w-3 h-3" /> FTE & Payroll
-                    </Link>
-                    <h1 className="section-header flex items-center gap-2">
-                        <Users className="w-5 h-5" style={{ color: 'var(--gem)' }} />
-                        Team View
-                    </h1>
-                    <p className="section-subtext">Developers grouped by primary project — team-level cost, velocity, and cap ratio rollups</p>
-                </div>
+            {/* Header — eyebrow + h1 + description */}
+            <div className="mb-6">
+                <Link href="/developers" className="inline-flex items-center gap-1 text-xs font-semibold mb-3 no-underline hover:underline" style={{ color: 'var(--envoy-red)' }}>
+                    <ArrowLeft className="w-3 h-3" /> FTE & Payroll
+                </Link>
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    Team Performance
+                </p>
+                <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Team View
+                </h1>
+                <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
+                    Developers grouped by primary project — team-level cost, velocity, and cap ratio rollups.
+                </p>
             </div>
 
                 {summary && (
@@ -124,9 +126,9 @@ export default function TeamViewPage() {
                             <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#F5A62315', color: '#F5A623' }}>
                                 <Users className="w-4 h-4" />
                             </div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>Developers</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>Developers</span>
                         </div>
-                        <span className="text-xl font-bold" style={{ color: '#3F4450' }}>{summary.totalPayrollDevs}</span>
+                        <span className="text-xl font-bold" style={{ color: 'var(--fg-1)' }}>{summary.totalPayrollDevs}</span>
                         <div className="flex flex-col gap-1 mt-1">
                             {[
                                 { label: 'Closed', value: summary.closedTicketDevs, color: '#4141A2' },
@@ -140,7 +142,7 @@ export default function TeamViewPage() {
                                         <div className="flex-1 h-[3px] rounded-full overflow-hidden" style={{ background: '#F0F0F5' }}>
                                             <div style={{ width: `${pct}%`, background: row.color, height: '100%', borderRadius: 999 }} />
                                         </div>
-                                        <span className="text-[10px] font-bold tabular-nums" style={{ color: '#717684', minWidth: 14, textAlign: 'right' }}>{row.value}</span>
+                                        <span className="text-[10px] font-bold tabular-nums" style={{ color: 'var(--fg-2)', minWidth: 14, textAlign: 'right' }}>{row.value}</span>
                                     </div>
                                 );
                             })}
@@ -156,8 +158,8 @@ export default function TeamViewPage() {
             {/* Cost by Team Chart */}
             {costChart.length > 0 && (
                 <div className="glass-card p-6 mb-6">
-                    <p className="text-sm font-semibold mb-1" style={{ color: '#3F4450' }}>Cost by Team</p>
-                    <p className="text-[11px] mb-4" style={{ color: '#A4A9B6' }}>Total allocated cost per project-team</p>
+                    <p className="text-sm font-semibold mb-1" style={{ color: 'var(--fg-1)' }}>Cost by Team</p>
+                    <p className="text-[11px] mb-4" style={{ color: 'var(--fg-3)' }}>Total allocated cost per project-team</p>
                     <ResponsiveContainer width="100%" height={Math.max(200, costChart.length * 44)}>
                         <BarChart data={costChart} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#EEF0F4" />
@@ -202,8 +204,8 @@ export default function TeamViewPage() {
                                             <FolderKanban className="w-4 h-4" style={{ color: '#4141A2' }} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold" style={{ color: '#3F4450' }}>{team.projectName}</p>
-                                            <p className="text-[11px]" style={{ color: '#A4A9B6' }}>{team.members.length} developer{team.members.length !== 1 ? 's' : ''} • {team.totalTickets} tickets</p>
+                                            <p className="text-sm font-bold" style={{ color: 'var(--fg-1)' }}>{team.projectName}</p>
+                                            <p className="text-[11px]" style={{ color: 'var(--fg-3)' }}>{team.members.length} developer{team.members.length !== 1 ? 's' : ''} • {team.totalTickets} tickets</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-6 text-[11px]">
@@ -215,13 +217,13 @@ export default function TeamViewPage() {
                                         </div>
                                         <div className="text-right">
                                             <span className="block font-bold" style={{ color: '#21944E' }}>{team.capRatio}%</span>
-                                            <span className="block text-[9px]" style={{ color: '#A4A9B6' }}>Cap</span>
+                                            <span className="block text-[9px]" style={{ color: 'var(--fg-3)' }}>Cap</span>
                                         </div>
                                         <div className="text-right">
                                             <span className="block font-bold" style={{ color: team.bugRatio > 30 ? '#FA4338' : '#F5A623' }}>{team.bugRatio}%</span>
-                                            <span className="block text-[9px]" style={{ color: '#A4A9B6' }}>Bugs</span>
+                                            <span className="block text-[9px]" style={{ color: 'var(--fg-3)' }}>Bugs</span>
                                         </div>
-                                        <span className="text-xs font-bold" style={{ color: '#A4A9B6' }}>{isOpen ? '▾' : '▸'}</span>
+                                        <span className="text-xs font-bold" style={{ color: 'var(--fg-3)' }}>{isOpen ? '▾' : '▸'}</span>
                                     </div>
                                 </button>
 
@@ -231,25 +233,25 @@ export default function TeamViewPage() {
                                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                             <thead>
                                                 <tr style={{ background: '#F6F6F9', borderBottom: '2px solid #E2E4E9' }}>
-                                                    <th style={{ padding: '8px 20px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Developer</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tickets</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>JIRA SP</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Applied SP</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bug SP</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cap SP</th>
-                                                    <th style={{ padding: '8px 20px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#A4A9B6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cost</th>
+                                                    <th style={{ padding: '8px 20px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Developer</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tickets</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>JIRA SP</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Applied SP</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bug SP</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cap SP</th>
+                                                    <th style={{ padding: '8px 20px', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Cost</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {team.members.map(m => (
                                                     <tr key={m.id} style={{ borderBottom: '1px solid #F0F0F5' }}>
                                                         <td style={{ padding: '10px 20px' }}>
-                                                            <Link href={`/developers/${m.id}`} className="text-[13px] font-semibold no-underline" style={{ color: '#3F4450' }}>
+                                                            <Link href={`/developers/${m.id}`} className="text-[13px] font-semibold no-underline" style={{ color: 'var(--fg-1)' }}>
                                                                 {m.name}
                                                             </Link>
                                                         </td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: '#717684', fontVariantNumeric: 'tabular-nums' }}>{m.ticketCount}</td>
-                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: '#A4A9B6', fontVariantNumeric: 'tabular-nums' }}>{m.jiraSP || '—'}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums' }}>{m.ticketCount}</td>
+                                                        <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>{m.jiraSP || '—'}</td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: m.appliedSP !== m.jiraSP ? '#4141A2' : '#3F4450', fontVariantNumeric: 'tabular-nums' }}>{m.appliedSP}</td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: m.bugSP > 0 ? '#FA4338' : '#C8CAD0', fontVariantNumeric: 'tabular-nums' }}>{m.bugSP || '—'}</td>
                                                         <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 13, color: '#21944E', fontVariantNumeric: 'tabular-nums' }}>{m.capSP}</td>
@@ -259,18 +261,18 @@ export default function TeamViewPage() {
                                             </tbody>
                                             <tfoot>
                                                 <tr style={{ background: '#F6F6F9', borderTop: '2px solid #E2E4E9' }}>
-                                                    <td style={{ padding: '10px 20px', fontSize: 12, fontWeight: 800, color: '#3F4450' }}>TEAM TOTAL</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#3F4450', fontVariantNumeric: 'tabular-nums' }}>{team.totalTickets}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#A4A9B6', fontVariantNumeric: 'tabular-nums' }}>{team.totalSP}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#3F4450', fontVariantNumeric: 'tabular-nums' }}>{team.totalAppliedSP}</td>
+                                                    <td style={{ padding: '10px 20px', fontSize: 12, fontWeight: 800, color: 'var(--fg-1)' }}>TEAM TOTAL</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>{team.totalTickets}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>{team.totalSP}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--fg-1)', fontVariantNumeric: 'tabular-nums' }}>{team.totalAppliedSP}</td>
                                                     <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#FA4338', fontVariantNumeric: 'tabular-nums' }}>{team.bugSP || '—'}</td>
                                                     <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#21944E', fontVariantNumeric: 'tabular-nums' }}>{team.capSP}</td>
                                                     <td style={{ padding: '10px 20px', textAlign: 'right', fontSize: 12, fontWeight: 800, color: 'var(--gem)', fontVariantNumeric: 'tabular-nums' }}>{fmt(team.totalCost)}</td>
                                                 </tr>
                                             </tfoot>
                                         </table>
-                                        <div className="px-6 py-2.5 text-[11px] flex items-center gap-4" style={{ background: '#FAFAFA', borderTop: '1px solid #E2E4E9', color: '#A4A9B6' }}>
-                                            <span>Cost / SP: <strong style={{ color: '#3F4450' }}>{fmt(team.costPerSP)}</strong></span>
+                                        <div className="px-6 py-2.5 text-[11px] flex items-center gap-4" style={{ background: '#FAFAFA', borderTop: '1px solid #E2E4E9', color: 'var(--fg-3)' }}>
+                                            <span>Cost / SP: <strong style={{ color: 'var(--fg-1)' }}>{fmt(team.costPerSP)}</strong></span>
                                             <span>Cap Ratio: <strong style={{ color: '#21944E' }}>{team.capRatio}%</strong></span>
                                             <span>Bug Ratio: <strong style={{ color: '#FA4338' }}>{team.bugRatio}%</strong></span>
                                         </div>
@@ -291,9 +293,9 @@ function KPI({ icon, label, value, color }: { icon: React.ReactNode; label: stri
         <div className="glass-card p-4 flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}15`, color }}>{icon}</div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>{label}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-3)' }}>{label}</span>
             </div>
-            <span className="text-xl font-bold" style={{ color: '#3F4450' }}>{value}</span>
+            <span className="text-xl font-bold" style={{ color: 'var(--fg-1)' }}>{value}</span>
         </div>
     );
 }
