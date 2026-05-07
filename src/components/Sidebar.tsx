@@ -127,11 +127,11 @@ function SidebarPeriodSelector({ collapsed }: { collapsed: boolean }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: '10px 0',
-                        background: open ? 'rgba(250,67,56,0.12)' : 'rgba(255,255,255,0.06)',
-                        border: `1px solid ${open ? 'rgba(250,67,56,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                        background: open ? '#FFEFEE' : 'var(--bg-page)',
+                        border: `1px solid ${open ? 'rgba(250,67,56,0.3)' : 'var(--border-subtle)'}`,
                         borderRadius: 10,
                         cursor: 'pointer',
-                        color: open ? '#FA4338' : '#A4A9B6',
+                        color: open ? 'var(--envoy-red)' : 'var(--fg-2)',
                         transition: 'all 0.15s',
                     }}
                 >
@@ -183,7 +183,7 @@ function SidebarPeriodSelector({ collapsed }: { collapsed: boolean }) {
 
     return (
         <div ref={ref} style={{ padding: '0 16px', marginBottom: 12, position: 'relative' }}>
-            <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#717684', marginBottom: 8, paddingLeft: 4 }}>
+            <p className="eyebrow" style={{ marginBottom: 8, paddingLeft: 4 }}>
                 Reporting Period
             </p>
             <button
@@ -193,14 +193,14 @@ function SidebarPeriodSelector({ collapsed }: { collapsed: boolean }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    background: open ? 'rgba(250,67,56,0.12)' : 'rgba(255,255,255,0.06)',
-                    border: `1.5px solid ${open ? 'rgba(250,67,56,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    background: open ? '#FFEFEE' : 'var(--bg-page)',
+                    border: `1px solid ${open ? 'rgba(250,67,56,0.3)' : 'var(--border-subtle)'}`,
                     borderRadius: 10,
                     padding: '9px 12px',
                     cursor: 'pointer',
                     fontSize: 12,
                     fontWeight: 600,
-                    color: open ? '#FA4338' : '#fff',
+                    color: open ? 'var(--envoy-red)' : 'var(--fg-1)',
                     transition: 'all 0.15s',
                     textAlign: 'left',
                 }}
@@ -214,7 +214,7 @@ function SidebarPeriodSelector({ collapsed }: { collapsed: boolean }) {
                     flexShrink: 0, opacity: 0.5,
                 }} />
             </button>
-            <p style={{ fontSize: 10, marginTop: 6, paddingLeft: 4, color: '#717684' }}>
+            <p style={{ fontSize: 10, marginTop: 6, paddingLeft: 4, color: 'var(--fg-2)' }}>
                 {formatDate(range.start)} – {formatDate(range.end)}
             </p>
 
@@ -367,26 +367,26 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                     width: 28,
                     height: 28,
                     borderRadius: '50%',
-                    background: 'var(--bg-sidebar)',
-                    border: '2px solid var(--border-color)',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    color: '#A4A9B6',
+                    color: 'var(--fg-2)',
                     zIndex: 60,
                     transition: 'background 0.15s, color 0.15s, border-color 0.15s',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                    boxShadow: 'var(--shadow-sm)',
                 }}
                 onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--gem)';
+                    e.currentTarget.style.background = 'var(--envoy-red)';
                     e.currentTarget.style.color = '#fff';
-                    e.currentTarget.style.borderColor = 'var(--gem)';
+                    e.currentTarget.style.borderColor = 'var(--envoy-red)';
                 }}
                 onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--bg-sidebar)';
-                    e.currentTarget.style.color = '#A4A9B6';
-                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.background = 'var(--bg-surface)';
+                    e.currentTarget.style.color = 'var(--fg-2)';
+                    e.currentTarget.style.borderColor = 'var(--border-subtle)';
                 }}
             >
                 {collapsed
@@ -413,8 +413,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                     />
                     {!collapsed && (
                         <div>
-                            <h1 className="text-lg font-bold text-white tracking-tight" style={{ lineHeight: 1.1 }}>No Cap</h1>
-                            <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: '#A4A9B6' }}>ASC 350-40</p>
+                            <h1 className="text-lg font-bold tracking-tight" style={{ lineHeight: 1.1, color: 'var(--fg-1)' }}>No Cap</h1>
+                            <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--fg-2)' }}>ASC 350-40</p>
                         </div>
                     )}
                 </Link>
@@ -433,18 +433,18 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         alignItems: 'center',
                         justifyContent: collapsed ? 'center' : 'flex-start',
                         gap: 8,
-                        background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'var(--bg-page)',
+                        border: '1px solid var(--border-subtle)',
                         borderRadius: 10,
                         padding: collapsed ? '10px 0' : '9px 12px',
                         cursor: 'pointer',
                         fontSize: 12,
                         fontWeight: 500,
-                        color: '#717684',
+                        color: 'var(--fg-2)',
                         transition: 'all 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-surface-2)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)'; }}
                 >
                     <Search style={{ width: 14, height: 14, flexShrink: 0 }} />
                     {!collapsed && (
@@ -452,8 +452,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                             <span style={{ flex: 1, textAlign: 'left' }}>Search…</span>
                             <kbd style={{
                                 fontSize: 9, padding: '1px 5px', borderRadius: 4,
-                                background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
-                                color: '#717684', fontFamily: 'system-ui', fontWeight: 700,
+                                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                                color: 'var(--fg-2)', fontFamily: 'system-ui', fontWeight: 700,
                             }}>⌘K</kbd>
                         </>
                     )}
@@ -463,7 +463,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
             {/* ── Navigation ── */}
             <div className="flex-1" style={{ padding: collapsed ? '0 6px' : '0 8px', overflowY: 'auto', overflowX: 'hidden' }}>
                 {!collapsed && (
-                    <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#717684', paddingLeft: 20, marginBottom: 12 }}>
+                    <p className="eyebrow" style={{ paddingLeft: 16, marginBottom: 12 }}>
                         Navigation
                     </p>
                 )}
@@ -498,10 +498,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                             alignItems: 'center',
                             justifyContent: collapsed ? 'center' : 'flex-start',
                             gap: 8,
-                            background: wizardActive
-                                ? 'linear-gradient(135deg, #FA4338 0%, #E0392E 100%)'
-                                : 'linear-gradient(135deg, #4141A2 0%, #353587 100%)',
-                            border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'var(--envoy-red)',
+                            border: 'none',
                             borderRadius: 10,
                             padding: collapsed ? '10px 0' : '10px 12px',
                             cursor: 'pointer',
@@ -510,7 +508,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                             color: '#fff',
                             boxShadow: wizardActive
                                 ? '0 4px 14px rgba(250,67,56,0.35)'
-                                : '0 4px 14px rgba(65,65,162,0.3)',
+                                : '0 2px 8px rgba(250,67,56,0.18)',
                             transition: 'all 0.15s',
                         }}
                         onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
@@ -540,25 +538,25 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         alignItems: 'center',
                         justifyContent: collapsed ? 'center' : 'flex-start',
                         gap: 8,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'var(--bg-page)',
+                        border: '1px solid var(--border-subtle)',
                         borderRadius: 10,
                         padding: collapsed ? '10px 0' : '9px 12px',
                         cursor: 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
-                        color: '#A4A9B6',
+                        color: 'var(--fg-2)',
                         transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(250,67,56,0.12)';
-                        e.currentTarget.style.color = '#FA4338';
+                        e.currentTarget.style.background = '#FFEFEE';
+                        e.currentTarget.style.color = 'var(--envoy-red)';
                         e.currentTarget.style.borderColor = 'rgba(250,67,56,0.25)';
                     }}
                     onMouseLeave={e => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                        e.currentTarget.style.color = '#A4A9B6';
-                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                        e.currentTarget.style.background = 'var(--bg-page)';
+                        e.currentTarget.style.color = 'var(--fg-2)';
+                        e.currentTarget.style.borderColor = 'var(--border-subtle)';
                     }}
                 >
                     <LogOut style={{ width: 14, height: 14, flexShrink: 0 }} />
