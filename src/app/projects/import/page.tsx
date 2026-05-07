@@ -234,7 +234,7 @@ export default function ImportPeriodPage() {
     };
 
     return (
-        <div className="max-w-5xl mx-auto">
+        <div className="w-full">
             <Link href="/projects/details" className="btn-ghost mb-6 inline-flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" /> Back to Project Details
             </Link>
