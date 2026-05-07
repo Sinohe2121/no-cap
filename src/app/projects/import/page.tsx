@@ -43,6 +43,7 @@ export default function ImportPeriodPage() {
         resolutionDate: string | null;
         assigneeName: string | null;
         summary: string | null;
+        customFields: Record<string, string>;
     }[]>([]);
     const [previousPeriodLabel, setPreviousPeriodLabel] = useState<string | null>(null);
     const [bucketFilter, setBucketFilter] = useState<'all' | 'new' | 'carryForwardMatched' | 'carryForwardUnexpected'>('all');
@@ -164,6 +165,24 @@ export default function ImportPeriodPage() {
         if (bucketFilter === 'all') return columnFilteredTickets;
         return columnFilteredTickets.filter(t => t.bucket === bucketFilter);
     }, [columnFilteredTickets, bucketFilter]);
+
+    // Apply the same column filters to the missing-carry-forward audit panel
+    // (using customFields persisted from the prior import) so the audit list
+    // narrows alongside the trial-run table — letting the user drill into
+    // exactly which expected tickets are still missing for their slice.
+    const filteredMissingCarryForwards = useMemo(() => {
+        if (Object.keys(columnFilters).length === 0) return missingCarryForwards;
+        return missingCarryForwards.filter(t => {
+            const cf = t.customFields || {};
+            for (const [colName, allowedValues] of Object.entries(columnFilters)) {
+                const raw = (cf[colName] || '(Blank)').toString();
+                const key = cellFilterKey(colName, raw);
+                if (!allowedValues.has(key)) return false;
+            }
+            return true;
+        });
+    // cellFilterKey closes over dateColumns
+    }, [missingCarryForwards, columnFilters, dateColumns]);
 
     const getUniqueValuesForCol = (colName: string): string[] => {
         const vals = new Set<string>();
@@ -463,13 +482,16 @@ export default function ImportPeriodPage() {
             )}
 
             {/* Audit-A: tickets we expected to see as carry-forwards but Jira didn't return */}
-            {!previewing && !importing && hasPreviewed && missingCarryForwards.length > 0 && (
+            {!previewing && !importing && hasPreviewed && filteredMissingCarryForwards.length > 0 && (
                 <Card className="p-5 mb-4 border-2" style={{ borderColor: '#F5C76A', background: '#FFFCEB' }}>
                     <div className="flex items-start gap-3 mb-3">
                         <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#D3A236' }} />
                         <div className="flex-1">
                             <h3 className="font-semibold text-sm mb-1" style={{ color: '#8B7020' }}>
-                                {missingCarryForwards.length} expected carry-forward{missingCarryForwards.length === 1 ? '' : 's'} not found in Jira's response
+                                {filteredMissingCarryForwards.length} expected carry-forward{filteredMissingCarryForwards.length === 1 ? '' : 's'} not found in Jira's response
+                                {filteredMissingCarryForwards.length !== missingCarryForwards.length && (
+                                    <span className="font-normal" style={{ color: '#A4762A' }}> · {missingCarryForwards.length} before column filters</span>
+                                )}
                             </h3>
                             <p className="text-[12px]" style={{ color: '#5A4A1A' }}>
                                 These tickets were active at end of <strong>{previousPeriodLabel}</strong> in our database (open or unresolved at that snapshot)
@@ -490,7 +512,7 @@ export default function ImportPeriodPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {missingCarryForwards.map(t => (
+                                {filteredMissingCarryForwards.map(t => (
                                     <tr key={t.ticketId} style={{ borderTop: '1px solid #F0E4B8' }}>
                                         <td className="px-3 py-1.5"><JiraTicketLink ticketId={t.ticketId} className="text-xs" style={{ color: '#4141A2' }} /></td>
                                         <td className="px-3 py-1.5 max-w-[280px] truncate" style={{ color: '#3F4450' }} title={t.summary || ''}>{t.summary || '—'}</td>

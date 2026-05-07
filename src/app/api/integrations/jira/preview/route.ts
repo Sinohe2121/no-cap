@@ -240,6 +240,7 @@ export async function POST(request: Request) {
             resolutionDate: string | null;
             assigneeName: string | null;
             summary: string | null;
+            customFields: Record<string, string>;
         }[] = [];
 
         if (previousLabel && priorPeriodExists && currentKey !== null && year && month) {
@@ -261,6 +262,7 @@ export async function POST(request: Request) {
                     importPeriod: true,
                     resolutionDate: true,
                     summary: true,
+                    customFields: true,
                     assignee: { select: { name: true } },
                 },
             });
@@ -273,6 +275,7 @@ export async function POST(request: Request) {
                     resolutionDate: t.resolutionDate ? t.resolutionDate.toISOString() : null,
                     assigneeName: t.assignee?.name ?? null,
                     summary: t.summary,
+                    customFields: (t.customFields as Record<string, string> | null) ?? {},
                 }));
         }
 
