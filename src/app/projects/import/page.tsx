@@ -111,6 +111,39 @@ export default function ImportPeriodPage() {
         carryForwardUnexpected: previewTickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
     }), [previewTickets]);
 
+    // ── Date-aware column filtering ───────────────────────────────────────
+    // Cells like "2026-02-27T23:18:32.564-0800" are unique per row, so the
+    // generic unique-values filter is useless on them. Detect date-shaped
+    // columns and switch their filter UI to a hierarchical Year → Month
+    // tree, with the in-set check operating on YYYY-MM keys.
+    const isIsoDate = (v: string): boolean => /^\d{4}-\d{2}-\d{2}/.test(v);
+    const yearMonth = (v: string): string => v.slice(0, 7); // "YYYY-MM"
+
+    const dateColumns = useMemo(() => {
+        const result = new Set<string>();
+        for (const col of customFieldsConfig) {
+            let dateCount = 0;
+            let totalCount = 0;
+            for (const t of previewTickets) {
+                const raw = t.customFields?.[col.name];
+                if (raw == null || raw === '') continue;
+                totalCount++;
+                if (isIsoDate(String(raw))) dateCount++;
+            }
+            // Treat as date column if at least 60% of non-blank values parse.
+            if (totalCount > 0 && dateCount / totalCount >= 0.6) {
+                result.add(col.name);
+            }
+        }
+        return result;
+    }, [previewTickets, customFieldsConfig]);
+
+    const cellFilterKey = (colName: string, raw: string): string => {
+        if (raw === '(Blank)') return '(Blank)';
+        if (dateColumns.has(colName) && isIsoDate(raw)) return yearMonth(raw);
+        return raw;
+    };
+
     const filteredTickets = useMemo(() => {
         let rows = previewTickets;
         if (bucketFilter !== 'all') {
@@ -119,16 +152,21 @@ export default function ImportPeriodPage() {
         if (Object.keys(columnFilters).length === 0) return rows;
         return rows.filter(ticket => {
             for (const [colName, allowedValues] of Object.entries(columnFilters)) {
-                const val = (ticket.customFields?.[colName] || '(Blank)').toString();
-                if (!allowedValues.has(val)) return false;
+                const raw = (ticket.customFields?.[colName] || '(Blank)').toString();
+                const key = cellFilterKey(colName, raw);
+                if (!allowedValues.has(key)) return false;
             }
             return true;
         });
-    }, [previewTickets, bucketFilter, columnFilters]);
+    // cellFilterKey closes over dateColumns, so listing it explicitly is enough
+    }, [previewTickets, bucketFilter, columnFilters, dateColumns]);
 
     const getUniqueValuesForCol = (colName: string): string[] => {
         const vals = new Set<string>();
-        previewTickets.forEach(t => vals.add((t.customFields?.[colName] || '(Blank)').toString()));
+        previewTickets.forEach(t => {
+            const raw = (t.customFields?.[colName] || '(Blank)').toString();
+            vals.add(cellFilterKey(colName, raw));
+        });
         return Array.from(vals).sort();
     };
 
@@ -568,16 +606,76 @@ export default function ImportPeriodPage() {
                                                                             <button onClick={() => clearFilter(col.name)} className="text-[10px] text-gray-500 hover:underline">Clear</button>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="max-h-48 overflow-y-auto space-y-1">
-                                                                        {uniqueVals.map(v => {
-                                                                            const isChecked = !columnFilters[col.name] || columnFilters[col.name].has(v);
+                                                                    <div className="max-h-64 overflow-y-auto space-y-1">
+                                                                        {dateColumns.has(col.name) ? (() => {
+                                                                            // Hierarchical year → month tree for date-shaped columns
+                                                                            const blankSelected = !columnFilters[col.name] || columnFilters[col.name].has('(Blank)');
+                                                                            const dateKeys = uniqueVals.filter(v => v !== '(Blank)').sort().reverse();
+                                                                            const byYear: Record<string, string[]> = {};
+                                                                            for (const ym of dateKeys) {
+                                                                                const yr = ym.slice(0, 4);
+                                                                                if (!byYear[yr]) byYear[yr] = [];
+                                                                                byYear[yr].push(ym);
+                                                                            }
+                                                                            const yearKeys = Object.keys(byYear).sort().reverse();
+                                                                            const isMonthChecked = (m: string) => !columnFilters[col.name] || columnFilters[col.name].has(m);
+                                                                            const yearAllChecked = (yr: string) => byYear[yr].every(m => isMonthChecked(m));
+                                                                            const toggleYear = (yr: string) => {
+                                                                                setColumnFilters(prev => {
+                                                                                    const next = { ...prev };
+                                                                                    const all = getUniqueValuesForCol(col.name);
+                                                                                    const current = new Set(next[col.name] || all);
+                                                                                    const yearMonths = byYear[yr];
+                                                                                    const allOn = yearMonths.every(m => current.has(m));
+                                                                                    if (allOn) yearMonths.forEach(m => current.delete(m));
+                                                                                    else yearMonths.forEach(m => current.add(m));
+                                                                                    if (current.size === all.length) delete next[col.name];
+                                                                                    else next[col.name] = current;
+                                                                                    return next;
+                                                                                });
+                                                                            };
+                                                                            const monthName = (mm: string) => MONTH_NAMES[parseInt(mm, 10) - 1] ?? mm;
                                                                             return (
-                                                                                <label key={v} className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
-                                                                                    <input type="checkbox" className="mt-0.5" checked={isChecked} onChange={() => handleFilterToggle(col.name, v)} />
-                                                                                    <span className="truncate" style={{ color: '#3F4450' }} title={v}>{v}</span>
-                                                                                </label>
+                                                                                <>
+                                                                                    {uniqueVals.includes('(Blank)') && (
+                                                                                        <label className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
+                                                                                            <input type="checkbox" className="mt-0.5" checked={blankSelected} onChange={() => handleFilterToggle(col.name, '(Blank)')} />
+                                                                                            <span style={{ color: '#717684', fontStyle: 'italic' }}>(Blank)</span>
+                                                                                        </label>
+                                                                                    )}
+                                                                                    {yearKeys.map(yr => (
+                                                                                        <div key={yr}>
+                                                                                            <label className="flex items-center gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none font-semibold">
+                                                                                                <input type="checkbox" checked={yearAllChecked(yr)} onChange={() => toggleYear(yr)} />
+                                                                                                <span style={{ color: '#3F4450' }}>{yr}</span>
+                                                                                                <span className="ml-auto text-[10px]" style={{ color: '#A4A9B6' }}>{byYear[yr].length} mo</span>
+                                                                                            </label>
+                                                                                            <div className="ml-5 border-l border-gray-200 pl-2">
+                                                                                                {byYear[yr].map(ym => {
+                                                                                                    const mm = ym.slice(5, 7);
+                                                                                                    return (
+                                                                                                        <label key={ym} className="flex items-center gap-2 text-xs cursor-pointer p-0.5 hover:bg-gray-50 rounded select-none">
+                                                                                                            <input type="checkbox" checked={isMonthChecked(ym)} onChange={() => handleFilterToggle(col.name, ym)} />
+                                                                                                            <span style={{ color: '#3F4450' }}>{monthName(mm)}</span>
+                                                                                                        </label>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </>
                                                                             );
-                                                                        })}
+                                                                        })() : (
+                                                                            uniqueVals.map(v => {
+                                                                                const isChecked = !columnFilters[col.name] || columnFilters[col.name].has(v);
+                                                                                return (
+                                                                                    <label key={v} className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
+                                                                                        <input type="checkbox" className="mt-0.5" checked={isChecked} onChange={() => handleFilterToggle(col.name, v)} />
+                                                                                        <span className="truncate" style={{ color: '#3F4450' }} title={v}>{v}</span>
+                                                                                    </label>
+                                                                                );
+                                                                            })
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </>
