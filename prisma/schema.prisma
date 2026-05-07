@@ -354,6 +354,18 @@ model AmortizationOverride {
   @@index([projectId])
 }
 
+// ─── Saved column-filter selections from a Jira import ─────────────
+// Recorded on each successful import so the next month's preview can
+// pre-fill the filter modal with the same selections, keeping the
+// included/excluded ticket set consistent period over period.
+model JiraImportFilter {
+  id            String   @id @default(cuid())
+  importPeriod  String   @unique         // e.g. "February 2026"
+  columnFilters Json                     // { "Issue Type": ["TASK", "BUG"], "Created": ["2026-01", "2026-02"] }
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // ─── LLM Configuration (singleton — one row, upserted) ───────────
 model LlmConfig {
   id                 String   @id @default("singleton")

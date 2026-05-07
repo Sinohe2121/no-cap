@@ -437,6 +437,20 @@ export async function POST(request: Request) {
             `(rosterOnly=${rosterOnly})`,
         );
 
+        // ── Carry-forward saved column filters from the prior period so the
+        // UI can pre-fill the filter modal with the same selections, keeping
+        // the included/excluded slice consistent period over period.
+        let previousPeriodFilters: Record<string, string[]> | null = null;
+        if (previousLabel) {
+            const priorFilter = await prisma.jiraImportFilter.findUnique({
+                where: { importPeriod: previousLabel },
+                select: { columnFilters: true },
+            });
+            if (priorFilter && priorFilter.columnFilters && typeof priorFilter.columnFilters === 'object') {
+                previousPeriodFilters = priorFilter.columnFilters as Record<string, string[]>;
+            }
+        }
+
         return NextResponse.json({
             tickets: previewTickets,
             customFieldsConfig: extraFields,
@@ -448,6 +462,7 @@ export async function POST(request: Request) {
             },
             periodLabel,
             previousPeriodLabel: previousLabel,
+            previousPeriodFilters,
         });
 
     } catch (error) {
