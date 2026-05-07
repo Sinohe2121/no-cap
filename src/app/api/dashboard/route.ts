@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeLoadedCost } from '@/lib/costUtils';
 import { loadCapitalizableStatuses } from '@/lib/classification';
-import { isTicketActiveInPeriod } from '@/lib/periodTickets';
+import { isTicketActiveInPeriod, getQualifyingPeriodLabels } from '@/lib/periodTickets';
 
 export async function GET(request: Request) {
     try {
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
         const periodStart = startParam ? new Date(startParam + 'T00:00:00') : new Date(now.getFullYear(), 0, 1);
 
         // ── Parallelize all independent queries ──
-        const [projects, fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImports, allTickets, accountingPeriods, capitalizableStatuses] = await Promise.all([
+        const [projects, fringeConfig, meetingConfig, bugSpConfig, otherSpConfig, developers, payrollImportsRaw, allTickets, accountingPeriods, capitalizableStatuses, qualifyingPeriods] = await Promise.all([
             prisma.project.findMany({
                 include: { _count: { select: { tickets: true } } },
             }),
@@ -39,7 +39,13 @@ export async function GET(request: Request) {
             }),
             prisma.accountingPeriod.findMany(),
             loadCapitalizableStatuses(),
+            getQualifyingPeriodLabels(),
         ]);
+
+        // Skip months that don't ALSO have a Jira ticket import. Otherwise
+        // we report cost for "April" purely from payroll dates even though
+        // no tickets have been imported for April yet.
+        const payrollImports = payrollImportsRaw.filter(p => qualifyingPeriods.has(p.label));
 
         const globalFringeRate = fringeConfig ? parseFloat(fringeConfig.value) : 0.25;
         const globalMeetingRate = meetingConfig ? parseFloat(meetingConfig.value) : 0;
