@@ -89,7 +89,7 @@ export default function EngineeringHealthPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
-                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
             </div>
         );
     }

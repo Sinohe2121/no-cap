@@ -43,3 +43,6 @@ next-env.d.ts
 # SQLite database
 *.db
 dev.db
+
+# Claude Code harness internals (worktrees, session locks, agent caches)
+/.claude

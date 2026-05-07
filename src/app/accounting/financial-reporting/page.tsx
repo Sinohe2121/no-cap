@@ -91,7 +91,7 @@ export default function FinancialReportingPage() {
 
             {loading && (
                 <div className="flex items-center justify-center h-[50vh]">
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 </div>
             )}
 

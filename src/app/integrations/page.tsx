@@ -1210,7 +1210,7 @@ export default function IntegrationsPage() {
 
                 {rulesLoading ? (
                     <div className="flex items-center justify-center py-8">
-                        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                        <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                     </div>
                 ) : (
                     <div className="rounded-xl border overflow-hidden mb-5" style={{ borderColor: '#E2E4E9' }}>

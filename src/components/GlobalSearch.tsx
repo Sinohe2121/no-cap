@@ -167,7 +167,7 @@ export function GlobalSearch() {
                 <div style={{ maxHeight: 380, overflowY: 'auto', padding: '4px 0' }}>
                     {loading && (
                         <div className="flex items-center justify-center py-6">
-                            <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                            <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                         </div>
                     )}
 

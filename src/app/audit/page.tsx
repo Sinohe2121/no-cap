@@ -178,7 +178,7 @@ function AuditPackTab({ periods }: { periods: { month: number; year: number; sta
 
             {loading && (
                 <div className="flex items-center justify-center py-16">
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 </div>
             )}
 
@@ -355,7 +355,7 @@ function CommentaryTab() {
 
             {loading && (
                 <div className="flex items-center justify-center py-16">
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 </div>
             )}
 
@@ -691,7 +691,7 @@ function AnomaliesTab({ onAnomaliesChanged }: { onAnomaliesChanged?: () => void 
         <div>
             {loading && (
                 <div className="flex items-center justify-center py-16">
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 </div>
             )}
 
@@ -807,7 +807,7 @@ function AsuReportTab() {
         <div>
             {loading && (
                 <div className="flex items-center justify-center py-16">
-                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--gem)', borderTopColor: 'transparent' }} />
+                    <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--envoy-red)', borderTopColor: 'transparent' }} />
                 </div>
             )}
 
