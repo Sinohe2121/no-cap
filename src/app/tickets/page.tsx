@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, X, Filter, ArrowLeft } from 'lucide-react';
+import { Search, X, Filter, ArrowLeft, Calendar } from 'lucide-react';
 import { JiraTicketLink } from '@/components/JiraTicketPanel';
+import { usePeriod } from '@/context/PeriodContext';
 
 interface TicketData {
     id: string;
@@ -51,9 +52,15 @@ export default function TicketsPage() {
     const [hasStoryPoints, setHasStoryPoints] = useState(false);
     const [hasAllocatedCost, setHasAllocatedCost] = useState(false);
     const [tab, setTab] = useState<'active' | 'closed'>('active');
+    const { apiParams, label: periodLabel, preset } = usePeriod();
 
     useEffect(() => {
-        fetch('/api/tickets')
+        // Honor the global Reporting Period filter from the sidebar so the
+        // list matches the count shown on the hub tile that linked here.
+        // The API filters by Jira "Created" date when start/end are passed.
+        setLoading(true);
+        const url = apiParams ? `/api/tickets?${apiParams}` : '/api/tickets';
+        fetch(url)
             .then((res) => res.ok ? res.json() : { tickets: [] })
             .then((data) => {
                 setTickets(data.tickets ?? []);
@@ -61,7 +68,7 @@ export default function TicketsPage() {
                 if (typeof data.otherSpFallback === 'number') setOtherSpFallback(data.otherSpFallback);
             })
             .finally(() => setLoading(false));
-    }, []);
+    }, [apiParams]);
 
     const activeTickets = useMemo(() => tickets.filter((t) => !t.resolutionDate), [tickets]);
     const closedTickets = useMemo(() => tickets.filter((t) => !!t.resolutionDate), [tickets]);
@@ -115,8 +122,18 @@ export default function TicketsPage() {
             </div>
             <div className="mb-8">
                 <h1 className="section-header">Tickets Tracker</h1>
-                <p className="section-subtext">All Jira tickets across projects — {tickets.length} total</p>
+                <p className="section-subtext">
+                    {preset === 'all_time'
+                        ? <>All Jira tickets across projects — {tickets.length} total</>
+                        : <>Showing tickets created in <strong>{periodLabel}</strong> — {tickets.length} match. Change the Reporting Period in the sidebar to widen the range.</>}
+                </p>
             </div>
+            {preset !== 'all_time' && (
+                <div className="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs" style={{ background: '#F0F0FA', color: '#4141A2', border: '1px solid #D9D9F0' }}>
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Filtered by <strong>{periodLabel}</strong> from the sidebar</span>
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="flex items-center gap-1 mb-6 p-1 rounded-xl" style={{ background: '#F6F6F9', width: 'fit-content' }}>
