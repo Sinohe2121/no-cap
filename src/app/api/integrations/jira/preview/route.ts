@@ -5,7 +5,7 @@ import { requireAdmin } from '@/lib/auth';
 import { normalizeIssueType } from '@/lib/jiraUtils';
 import { computeLoadedCost } from '@/lib/costUtils';
 import { formatPeriodLabel } from '@/lib/periodLabel';
-import { activeInPeriodWhere, parsePeriodLabel } from '@/lib/periodTickets';
+import { parsePeriodLabel, periodLabelsThrough } from '@/lib/periodTickets';
 
 export async function POST(request: Request) {
     try {
@@ -219,12 +219,21 @@ export async function POST(request: Request) {
         }
 
         // ── Audit-A: tickets we expected to see as carry-forwards but didn't ──
-        // The system's last view of these tickets had them active going into
-        // this period (importPeriod ≤ {previous period} AND not resolved before
-        // start of this period). If Jira's response for this period does NOT
-        // include them, something has changed externally — they were closed
-        // out-of-band, deleted, or otherwise dropped from the active scope.
-        // Only meaningful when prior history exists.
+        // A ticket carries forward into the current period only if it was
+        // STILL OPEN AT THE END OF the previous period — equivalently, not
+        // resolved before the current period started. Tickets resolved
+        // *during* the previous period closed in that period and don't
+        // carry forward.
+        //
+        // So the expected-carry-forward set is:
+        //   - importPeriod is some period strictly EARLIER than current
+        //     (already in the system from a prior import), AND
+        //   - resolutionDate is null OR resolutionDate >= startOfCurrent
+        //     (not yet resolved by the time the current period started).
+        //
+        // Only meaningful when prior history exists. If Jira's response
+        // for the current period doesn't include one of these, something
+        // changed externally (resolved out-of-band, deleted, scope-changed).
         let missingCarryForwards: {
             ticketId: string;
             importPeriod: string | null;
@@ -233,9 +242,20 @@ export async function POST(request: Request) {
             summary: string | null;
         }[] = [];
 
-        if (previousLabel && priorPeriodExists) {
+        if (previousLabel && priorPeriodExists && currentKey !== null && year && month) {
+            const priorLabels = periodLabelsThrough(year, month).filter(l => {
+                const k = labelKey(l);
+                return k !== null && k < currentKey;
+            });
+            const startOfCurrent = new Date(year, month - 1, 1);
             const expectedCarryRows = await prisma.jiraTicket.findMany({
-                where: activeInPeriodWhere(previousLabel),
+                where: {
+                    importPeriod: { in: priorLabels },
+                    OR: [
+                        { resolutionDate: null },
+                        { resolutionDate: { gte: startOfCurrent } },
+                    ],
+                },
                 select: {
                     ticketId: true,
                     importPeriod: true,
