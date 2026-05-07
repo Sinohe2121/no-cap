@@ -211,7 +211,7 @@
 
   --bg-page:        var(--arctic);
   --bg-card:        var(--white);
-  --bg-sidebar:     var(--carbon);  /* PR 3 flips to var(--bg-surface) */
+  --bg-sidebar:     var(--bg-surface);  /* Variation A: white sidebar */
   --border-color:   #E2E4E9;        /* preserved exactly — design uses #E6E8ED */
   --border-hover:   var(--carbon-30);
   --text-primary:   var(--carbon);
@@ -389,11 +389,12 @@ body {
   border: 1px solid transparent;
 }
 
-/* ─── Sidebar ───────────────────────────────────────────────── */
+/* ─── Sidebar — Variation A (white surface) ─────────────────── */
 .sidebar {
   width: 260px;
   min-height: 100vh;
   background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
   position: fixed;
   top: 0;
   left: 0;
@@ -406,25 +407,27 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
-  color: var(--carbon-30);
+  padding: 10px 14px;
+  color: var(--fg-1);
   text-decoration: none;
-  border-radius: 10px;
-  margin: 2px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-md);
+  margin: 1px 8px;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+  transition: background var(--dur-fast) var(--ease-standard),
+              color var(--dur-fast) var(--ease-standard);
 }
 
 .sidebar-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--white);
+  background: var(--bg-surface-2);
+  color: var(--fg-1);
 }
 
-.sidebar-link.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--white);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+.sidebar-link.active,
+.sidebar-link.active:hover {
+  background: #FFEFEE;        /* pink tint of envoy-red, per design */
+  color: var(--envoy-red);
+  font-weight: var(--fw-bold);
 }
 
 /* ─── Buttons ───────────────────────────────────────────────── */
@@ -453,13 +456,16 @@ body {
   cursor: not-allowed;
 }
 
+/* btn-accent was the legacy "secondary primary" button (indigo). Variation A
+   collapses both to brand red, with btn-accent kept as a thin alias of
+   btn-primary so old call-sites don't break. */
 .btn-accent {
-  background: var(--gem);
-  color: var(--white);
+  background: var(--envoy-red);
+  color: var(--envoy-white);
   padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -470,7 +476,7 @@ body {
 
 .btn-accent:hover {
   opacity: 0.9;
-  box-shadow: 0 4px 12px rgba(65, 65, 162, 0.25);
+  box-shadow: 0 4px 12px rgba(250, 67, 56, 0.25);
 }
 
 .btn-accent:disabled {
@@ -635,8 +641,8 @@ body {
 
 .form-input:focus {
   outline: none;
-  border-color: var(--gem);
-  box-shadow: 0 0 0 3px rgba(65, 65, 162, 0.1);
+  border-color: var(--envoy-red);
+  box-shadow: var(--shadow-focus);
 }
 
 .form-input::placeholder {
@@ -668,7 +674,8 @@ body {
 
 .form-select:focus {
   outline: none;
-  border-color: var(--gem);
+  border-color: var(--envoy-red);
+  box-shadow: var(--shadow-focus);
 }
 
 /* ─── Recharts Overrides ────────────────────────────────────── */
@@ -745,6 +752,83 @@ body {
   letter-spacing: -0.02em;
   line-height: 1.1;
   margin-bottom: 8px;
+}
+
+/* ─── Variation A utility classes ─────────────────────────────
+   Composable patterns lifted from the design pack. Use these on new
+   surfaces; existing surfaces continue to work via legacy classes
+   (.glass-card, .stat-card, .fintech-card) until they're migrated. */
+
+/* Uppercase eyebrow label — sits above metrics, headings, sections. */
+.eyebrow {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-bold);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+
+/* KPI strip: one bordered card with cells separated by 1px right border. */
+.kpi-strip {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.kpi-strip > .kpi-cell {
+  flex: 1;
+  padding: 14px 18px;
+  border-right: 1px solid var(--border-subtle);
+}
+.kpi-strip > .kpi-cell:last-child {
+  border-right: none;
+}
+
+/* Underlined tab pattern — red active border, gray label otherwise. */
+.tab-row {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tab-row > .tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tab-row > .tab.active {
+  color: var(--envoy-red);
+  border-bottom-color: var(--envoy-red);
+}
+
+/* Filter chip — arctic surface, dark when active. */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-semibold);
+  background: var(--bg-page);
+  color: var(--fg-1);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.filter-chip.active {
+  background: var(--envoy-carbon);
+  color: var(--envoy-white);
 }
 
 /* ─── Print Styles (Policy Memo PDF) ───────────────────────── */
