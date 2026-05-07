@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     BarChart2, TrendingUp, Calendar, DollarSign, Target,
     ChevronDown, ChevronUp, Download, Edit2, Check, X,
@@ -230,10 +230,13 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                             const pctAmort = asset.costBasis > 0
                                 ? Math.min(asset.accumulatedAmortization / asset.costBasis, 1)
                                 : 0;
+                            // Fragment must carry the key — shorthand <> can't,
+                            // so use React.Fragment explicitly. Inner <tr>
+                            // keys aren't seen by React when the .map item is
+                            // a fragment.
                             return (
-                                <>
+                                <React.Fragment key={asset.id}>
                                     <tr
-                                        key={asset.id}
                                         style={{ cursor: 'pointer' }}
                                         onClick={() => setExpanded(isExp ? null : asset.id)}
                                     >
@@ -278,7 +281,7 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                                         </td>
                                     </tr>
                                     {isExp && (
-                                        <tr key={`${asset.id}-exp`} style={{ background: '#F9FAFB' }}>
+                                        <tr style={{ background: '#F9FAFB' }}>
                                             <td colSpan={8} style={{ padding: '12px 20px' }}>
                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                                                     <div>
@@ -303,7 +306,7 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                                             </td>
                                         </tr>
                                     )}
-                                </>
+                                </React.Fragment>
                             );
                         })}
                     </tbody>
