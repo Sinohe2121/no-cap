@@ -314,11 +314,16 @@ export default function IntegrationsPage() {
         setRulesSaved(false);
         try {
             const ranked = rules.map((r, i) => ({ ...r, priority: i + 1 }));
-            await fetch('/api/rules', {
+            const res = await fetch('/api/rules', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(ranked),
             });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                alert(`Failed to save rules: ${body?.error || res.statusText}`);
+                return;
+            }
             setRules(ranked);
             setRulesSaved(true);
             setTimeout(() => setRulesSaved(false), 2000);

@@ -325,10 +325,11 @@ export const UpdateIncidentSchema = z.object({
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const ClassificationRuleSchema = z.object({
-    field: z.string(),
-    operator: z.string(),
-    value: z.string(),
-    action: z.string(),
+    priority: z.number().int(),
+    issueType: z.string().min(1),
+    projectStatus: z.string().min(1),
+    projectCapitalizable: z.boolean().nullable(),
+    action: z.enum(['CAPITALIZE', 'EXPENSE']),
 });
 
 export const ClassificationRulesArraySchema = z.array(ClassificationRuleSchema);
