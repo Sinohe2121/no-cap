@@ -6,6 +6,7 @@ import { JiraImportSchema, formatZodError } from '@/lib/validations';
 import { persistTicketCosts } from '@/lib/ticketCostPersist';
 import { normalizeIssueType } from '@/lib/jiraUtils';
 import { invalidatePeriodCostsCache } from '@/lib/calculationsCache';
+import { parsePeriodLabel } from '@/lib/periodTickets';
 
 export async function POST(request: Request) {
     try {
@@ -100,23 +101,36 @@ export async function POST(request: Request) {
         }
 
         // ── Step 4: Insert new tickets in bulk; refresh existing ones in place ──
-        // importPeriod is FIRST-SEEN — set on insert and never overwritten on
-        // re-encounter. A ticket open at end of March is imported with
-        // importPeriod="March 2026"; when April's wizard runs (still open or
-        // now resolved), April's import refreshes resolutionDate, summary,
-        // story points, assignee, etc. but leaves importPeriod = March 2026.
+        // importPeriod = FIRST-SEEN (earliest period the ticket has appeared
+        // in any of our imports). It moves backward but never forward:
+        //   • on insert: set to the period being imported
+        //   • on re-encounter, current >= existing: leave alone
+        //     (the ticket has already been seen earlier; re-encounters refresh
+        //     resolutionDate / summary / story points / assignee / etc.)
+        //   • on re-encounter, current < existing: move backward to current
+        //     (we're back-filling an earlier period and discovering the ticket
+        //     existed before what we previously thought was first-seen)
         // The "active in period N" derivation (importPeriod ≤ N AND not
         // resolved before N starts) keeps the ticket in scope for every
         // period until it actually closes.
-        // Fresh inserts take the createMany fast path; only re-encounters pay
-        // the per-row update cost.
         const existingTickets = await prisma.jiraTicket.findMany({
             where: { ticketId: { in: dataToInsert.map((t) => t.ticketId) } },
-            select: { ticketId: true },
+            select: { ticketId: true, importPeriod: true },
         });
-        const existingTicketIds = new Set(existingTickets.map((t) => t.ticketId));
-        const newTickets = dataToInsert.filter((t) => !existingTicketIds.has(t.ticketId));
-        const updateTargets = dataToInsert.filter((t) => existingTicketIds.has(t.ticketId));
+        const existingByTicketId = new Map(existingTickets.map((t) => [t.ticketId, t.importPeriod] as const));
+        const newTickets = dataToInsert.filter((t) => !existingByTicketId.has(t.ticketId));
+        const updateTargets = dataToInsert.filter((t) => existingByTicketId.has(t.ticketId));
+
+        // Compute the chronological key of the period being imported (if any).
+        // Used to decide whether a re-encounter should move importPeriod
+        // backward. parsePeriodLabel returns null on malformed input, in which
+        // case we fall back to "leave existing importPeriod alone" semantics.
+        const labelKeyOf = (label: string | null): number | null => {
+            if (!label) return null;
+            const p = parsePeriodLabel(label);
+            return p ? p.year * 12 + (p.month - 1) : null;
+        };
+        const currentKey = labelKeyOf(importPeriod ?? null);
 
         let importedCount = 0;
         if (newTickets.length > 0) {
@@ -131,13 +145,18 @@ export async function POST(request: Request) {
         for (let i = 0; i < updateTargets.length; i += BATCH_SIZE) {
             const batch = updateTargets.slice(i, i + BATCH_SIZE);
             await prisma.$transaction(
-                batch.map((ticket) =>
-                    prisma.jiraTicket.update({
+                batch.map((ticket) => {
+                    const existingImportPeriod = existingByTicketId.get(ticket.ticketId) ?? null;
+                    const existingKey = labelKeyOf(existingImportPeriod);
+                    // Move importPeriod backward iff we have both keys and
+                    // the period being imported now is earlier than the
+                    // existing first-seen period.
+                    const shouldMoveBackward =
+                        currentKey !== null &&
+                        existingKey !== null &&
+                        currentKey < existingKey;
+                    return prisma.jiraTicket.update({
                         where: { ticketId: ticket.ticketId },
-                        // NOTE: deliberately omitting importPeriod — first-seen
-                        // is immutable once set. Re-encounters refresh current
-                        // state (resolutionDate, assignee, etc.) but the
-                        // ticket stays anchored to its original period.
                         data: {
                             epicKey: ticket.epicKey,
                             issueType: ticket.issueType,
@@ -147,9 +166,10 @@ export async function POST(request: Request) {
                             assigneeId: ticket.assigneeId,
                             projectId: ticket.projectId,
                             customFields: ticket.customFields,
+                            ...(shouldMoveBackward ? { importPeriod: ticket.importPeriod } : {}),
                         },
-                    })
-                )
+                    });
+                })
             );
         }
         const updatedCount = updateTargets.length;

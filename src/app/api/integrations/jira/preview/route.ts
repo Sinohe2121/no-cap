@@ -5,7 +5,7 @@ import { requireAdmin } from '@/lib/auth';
 import { normalizeIssueType } from '@/lib/jiraUtils';
 import { computeLoadedCost } from '@/lib/costUtils';
 import { formatPeriodLabel } from '@/lib/periodLabel';
-import { activeInPeriodWhere } from '@/lib/periodTickets';
+import { activeInPeriodWhere, parsePeriodLabel } from '@/lib/periodTickets';
 
 export async function POST(request: Request) {
     try {
@@ -186,17 +186,45 @@ export async function POST(request: Request) {
             existingTicketRows.map(t => [t.ticketId, { importPeriod: t.importPeriod, resolutionDate: t.resolutionDate }]),
         );
 
+        // ── Has any prior period actually been imported? ────────────────────
+        // The "carry-forward" and "unexpected carry-forward" buckets only make
+        // sense if there's a chronologically EARLIER period in the system. On
+        // a seed import (the very first period anyone has ever imported), all
+        // pre-period-creation tickets are just normal "new" — there's no
+        // earlier import that should have caught them.
+        const periodLabel = (year && month) ? formatPeriodLabel(month, year) : null;
+        const previousLabel = (year && month)
+            ? (month === 1 ? formatPeriodLabel(12, year - 1) : formatPeriodLabel(month - 1, year))
+            : null;
+        const currentKey = (year && month) ? year * 12 + (month - 1) : null;
+        const labelKey = (label: string | null): number | null => {
+            if (!label) return null;
+            const p = parsePeriodLabel(label);
+            return p ? p.year * 12 + (p.month - 1) : null;
+        };
+
+        // Detect any imported ticket whose importPeriod is strictly before the
+        // current period — that's the signal that prior-period history exists.
+        let priorPeriodExists = false;
+        if (currentKey !== null) {
+            const distinctImportPeriods = await prisma.jiraTicket.findMany({
+                where: { importPeriod: { not: null } },
+                distinct: ['importPeriod'],
+                select: { importPeriod: true },
+            });
+            for (const row of distinctImportPeriods) {
+                const k = labelKey(row.importPeriod);
+                if (k !== null && k < currentKey) { priorPeriodExists = true; break; }
+            }
+        }
+
         // ── Audit-A: tickets we expected to see as carry-forwards but didn't ──
         // The system's last view of these tickets had them active going into
         // this period (importPeriod ≤ {previous period} AND not resolved before
         // start of this period). If Jira's response for this period does NOT
         // include them, something has changed externally — they were closed
         // out-of-band, deleted, or otherwise dropped from the active scope.
-        const periodLabel = (year && month) ? formatPeriodLabel(month, year) : null;
-        const previousLabel = (year && month)
-            ? (month === 1 ? formatPeriodLabel(12, year - 1) : formatPeriodLabel(month - 1, year))
-            : null;
-
+        // Only meaningful when prior history exists.
         let missingCarryForwards: {
             ticketId: string;
             importPeriod: string | null;
@@ -205,7 +233,7 @@ export async function POST(request: Request) {
             summary: string | null;
         }[] = [];
 
-        if (previousLabel) {
+        if (previousLabel && priorPeriodExists) {
             const expectedCarryRows = await prisma.jiraTicket.findMany({
                 where: activeInPeriodWhere(previousLabel),
                 select: {
@@ -312,18 +340,43 @@ export async function POST(request: Request) {
             const existingDbRow = existingTicketByKey.get(issueKey);
             const issueCreatedRaw = issue.fields.created;
             const issueCreatedDate = issueCreatedRaw ? new Date(issueCreatedRaw) : null;
-            // Bucket classification — see comment block above for invariants.
+            // Bucket classification:
+            //   carryForwardMatched   — already in DB AND its importPeriod is
+            //                           strictly EARLIER than the current period
+            //   carryForwardUnexpected — not in DB, was created before this
+            //                           period started, AND prior-period
+            //                           history exists in the system (i.e.
+            //                           something was imported earlier and we
+            //                           expected to have seen this ticket then)
+            //   new                   — everything else, including:
+            //                           • truly new tickets created in-period
+            //                           • re-runs of the same period
+            //                           • back-fills (existing record's
+            //                             importPeriod is at or after the
+            //                             period being imported now)
+            //                           • seed imports where no earlier
+            //                             history exists yet
+            const existingKey = labelKey(existingDbRow?.importPeriod ?? null);
             let bucket: 'new' | 'carryForwardMatched' | 'carryForwardUnexpected';
             let originPeriod: string | null = null;
-            if (existingDbRow) {
+            if (existingDbRow && currentKey !== null && existingKey !== null && existingKey < currentKey) {
                 bucket = 'carryForwardMatched';
                 originPeriod = existingDbRow.importPeriod;
-            } else if (periodStartDate && issueCreatedDate && issueCreatedDate < periodStartDate) {
+            } else if (
+                !existingDbRow &&
+                priorPeriodExists &&
+                periodStartDate && issueCreatedDate && issueCreatedDate < periodStartDate
+            ) {
                 bucket = 'carryForwardUnexpected';
                 // Best-effort guess at the period this should have been first imported in
                 originPeriod = formatPeriodLabel(issueCreatedDate.getMonth() + 1, issueCreatedDate.getFullYear());
             } else {
                 bucket = 'new';
+                // For back-fills, surface the existing later-period label so
+                // the UI can hint that this row will move backward on import.
+                if (existingDbRow && currentKey !== null && existingKey !== null && existingKey >= currentKey) {
+                    originPeriod = existingDbRow.importPeriod;
+                }
             }
 
             const previewRow = {
