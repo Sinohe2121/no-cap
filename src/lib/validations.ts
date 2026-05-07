@@ -205,6 +205,9 @@ export const JiraImportSchema = z.object({
         originPeriod: z.string().nullable().optional(),
     })).min(1, 'At least one ticket is required'),
     importPeriod: z.string().optional(),
+    // Column filters used during this import — saved keyed by importPeriod
+    // so the next month's preview can pre-fill the same selections.
+    columnFilters: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

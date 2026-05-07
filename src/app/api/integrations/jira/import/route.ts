@@ -18,7 +18,7 @@ export async function POST(request: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
         }
-        const { tickets, importPeriod } = parsed.data;
+        const { tickets, importPeriod, columnFilters } = parsed.data;
 
         // ── Step 1: Auto-create missing projects from epicKey/projectName ────────
         // Collect unique epicKey → projectName for tickets that have no projectId
@@ -191,6 +191,17 @@ export async function POST(request: Request) {
         if (importPeriod) {
             const persistResult = await persistTicketCosts(importPeriod);
             costsUpdated = persistResult.updated;
+        }
+
+        // Persist the column filters that were active at import time so
+        // the next month's preview can pre-fill them. Only when we have
+        // a real importPeriod label to key on.
+        if (importPeriod && columnFilters) {
+            await prisma.jiraImportFilter.upsert({
+                where: { importPeriod },
+                create: { importPeriod, columnFilters },
+                update: { columnFilters },
+            });
         }
 
         // Ticket data drives cost results — clear the cache so the next read

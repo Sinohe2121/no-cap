@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search, Calendar, CheckSquare, Download, AlertCircle, Filter, ChevronLeft, ChevronRight, Users, Info, Clock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Search, Calendar, CheckSquare, Download, AlertCircle, Filter, ChevronLeft, ChevronRight, Users, Info, Clock, AlertTriangle, SlidersHorizontal } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { JiraTicketLink } from '@/components/JiraTicketPanel';
 import { MONTH_NAMES, formatPeriodLabel } from '@/lib/periodLabel';
 import LoadingPanel from '@/components/wizard/LoadingPanel';
+import ColumnFilterModal from '@/components/import/ColumnFilterModal';
 
 function getLastDayOfMonth(year: number, month: number): number {
     return new Date(year, month, 0).getDate();
@@ -54,6 +55,14 @@ export default function ImportPeriodPage() {
     const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
     const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
 
+    // Saved column filters from the prior period (so the modal can pre-fill)
+    const [previousPeriodFilters, setPreviousPeriodFilters] = useState<Record<string, string[]> | null>(null);
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
+    // Track whether we've auto-opened the modal for this preview already
+    // (only auto-open the first time per preview run; user can reopen via the
+    // "Configure filters" button afterward).
+    const autoOpenedForPreview = useRef<boolean>(false);
+
     // Load available payroll periods
     useEffect(() => {
         setLoadingPeriods(true);
@@ -96,6 +105,15 @@ export default function ImportPeriodPage() {
             setMonth(0);
         }
     }, [year, availableMonths]);
+
+    // Auto-open the filter modal once per successful preview, only after
+    // customFieldsConfig is populated so the modal has columns to render.
+    useEffect(() => {
+        if (hasPreviewed && customFieldsConfig.length > 0 && !autoOpenedForPreview.current) {
+            autoOpenedForPreview.current = true;
+            setFilterModalOpen(true);
+        }
+    }, [hasPreviewed, customFieldsConfig.length]);
 
     const hasSelection = month > 0;
     const startDate = hasSelection ? `${year}-${String(month).padStart(2, '0')}-01` : '';
@@ -255,11 +273,16 @@ export default function ImportPeriodPage() {
             setMissingCarryForwards(data.buckets?.missingCarryForwards || []);
             setPreviousPeriodLabel(data.previousPeriodLabel || null);
             setCustomFieldsConfig(data.customFieldsConfig || []);
+            setPreviousPeriodFilters(data.previousPeriodFilters || null);
             const importable = data.tickets.filter((t: any) => t.importable);
             setSelectedTicketIds(new Set(importable.map((t: any) => t.ticketId)));
             setColumnFilters({});
             setBucketFilter('all');
             setHasPreviewed(true);
+            // Auto-open the filter modal once per preview so the user
+            // can confirm or override the prior period's selections before
+            // touching the table.
+            autoOpenedForPreview.current = false;
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -277,11 +300,21 @@ export default function ImportPeriodPage() {
         const filteredIds = new Set(filteredTickets.map(t => t.ticketId));
         const ticketsToImport = previewTickets.filter(t => selectedTicketIds.has(t.ticketId) && filteredIds.has(t.ticketId));
         setImporting(true);
+        // Serialize the active column filters so they can be saved keyed
+        // to this import period and pre-fill next month's filter modal.
+        const serializedFilters: Record<string, string[]> = {};
+        for (const [col, set] of Object.entries(columnFilters)) {
+            serializedFilters[col] = Array.from(set);
+        }
         try {
             const res = await fetch('/api/integrations/jira/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tickets: ticketsToImport, importPeriod: formatPeriodLabel(month, year) }),
+                body: JSON.stringify({
+                    tickets: ticketsToImport,
+                    importPeriod: formatPeriodLabel(month, year),
+                    columnFilters: serializedFilters,
+                }),
             });
             if (!res.ok) {
                 const err = await res.json();
@@ -593,11 +626,23 @@ export default function ImportPeriodPage() {
                             <CheckSquare size={16} style={{ color: '#21944E' }} />
                             <h3 className="font-semibold" style={{ color: '#3F4450' }}>Trial Run Results ({filteredTickets.length} shown · {previewTickets.length} total)</h3>
                         </div>
-                        {previewTickets.length > 0 && (
-                            <Button onClick={handleImport} isLoading={importing}>
-                                <Download className="w-4 h-4" /> Import {filteredTickets.filter(t => selectedTicketIds.has(t.ticketId)).length} Tickets
-                            </Button>
-                        )}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setFilterModalOpen(true)}
+                                className="text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-50"
+                                style={{ color: Object.keys(columnFilters).length > 0 ? '#4141A2' : '#717684', border: `1px solid ${Object.keys(columnFilters).length > 0 ? '#4141A2' : '#E2E4E9'}` }}
+                            >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                {Object.keys(columnFilters).length > 0
+                                    ? `${Object.keys(columnFilters).length} column filter${Object.keys(columnFilters).length === 1 ? '' : 's'}`
+                                    : 'Configure column filters'}
+                            </button>
+                            {previewTickets.length > 0 && (
+                                <Button onClick={handleImport} isLoading={importing}>
+                                    <Download className="w-4 h-4" /> Import {filteredTickets.filter(t => selectedTicketIds.has(t.ticketId)).length} Tickets
+                                </Button>
+                            )}
+                        </div>
                     </div>
 
                     {/* Bucket pills — filter the table to one source class */}
@@ -835,6 +880,19 @@ export default function ImportPeriodPage() {
                     })()}
                 </div>
             )}
+
+            <ColumnFilterModal
+                open={filterModalOpen}
+                onClose={() => setFilterModalOpen(false)}
+                onApply={(filters) => setColumnFilters(filters)}
+                customFieldsConfig={customFieldsConfig}
+                previewTickets={previewTickets}
+                dateColumns={dateColumns}
+                cellFilterKey={cellFilterKey}
+                initialFilters={columnFilters}
+                priorFilters={previousPeriodFilters}
+                priorPeriodLabel={previousPeriodLabel}
+            />
         </div>
     );
 }
