@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     BarChart2, TrendingUp, Calendar, DollarSign, Target,
-    ChevronDown, ChevronUp, Download, Edit2, Check, X,
+    ChevronDown, ChevronUp, ChevronRight, Download, Edit2, Check, X,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { usePeriod } from '@/context/PeriodContext';
 import { CHART_SEMANTIC } from '@/lib/chartColors';
+import AssetDrawer from '@/components/reports/AssetDrawer';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ interface PortfolioAsset {
     fullyAmortized: boolean;
     mgmtAuthorized: boolean;
     probableToComplete: boolean;
+    ticketCount: number;
+    capThisPeriod: number;
 }
 
 interface AmortRow {
@@ -181,7 +184,9 @@ function downloadCsv(rows: AmortRow[], projectName: string) {
 function PortfolioTab({ apiParams }: { apiParams: string }) {
     const [data, setData] = useState<{ summary: { totalAssets: number; totalCostBasis: number; totalNBV: number; totalAccumAmort: number; monthlyAmortBurn: number; averageUsefulLife: number }; assets: PortfolioAsset[] } | null>(null);
     const [loading, setLoading] = useState(true);
-    const [expanded, setExpanded] = useState<string | null>(null);
+    // Selected asset → opens the right-side drawer with full project detail.
+    // Replaces the previous inline expand-row pattern.
+    const [drawerAsset, setDrawerAsset] = useState<PortfolioAsset | null>(null);
 
     useEffect(() => {
         setLoading(true);
@@ -228,20 +233,15 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                     </thead>
                     <tbody>
                         {data.assets.map((asset) => {
-                            const isExp = expanded === asset.id;
                             const pctAmort = asset.costBasis > 0
                                 ? Math.min(asset.accumulatedAmortization / asset.costBasis, 1)
                                 : 0;
-                            // Fragment must carry the key — shorthand <> can't,
-                            // so use React.Fragment explicitly. Inner <tr>
-                            // keys aren't seen by React when the .map item is
-                            // a fragment.
                             return (
-                                <React.Fragment key={asset.id}>
-                                    <tr
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => setExpanded(isExp ? null : asset.id)}
-                                    >
+                                <tr
+                                    key={asset.id}
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => setDrawerAsset(asset)}
+                                >
                                         <td>
                                             <div>
                                                 <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>{asset.name}</p>
@@ -279,41 +279,16 @@ function PortfolioTab({ apiParams }: { apiParams: string }) {
                                             </span>
                                         </td>
                                         <td>
-                                            {isExp ? <ChevronUp className="w-4 h-4" style={{ color: '#A4A9B6' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#A4A9B6' }} />}
+                                            <ChevronRight className="w-4 h-4" style={{ color: '#A4A9B6' }} />
                                         </td>
-                                    </tr>
-                                    {isExp && (
-                                        <tr style={{ background: '#F9FAFB' }}>
-                                            <td colSpan={8} style={{ padding: '12px 20px' }}>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                                                    <div>
-                                                        <p style={{ color: '#A4A9B6' }}>Monthly Amort.</p>
-                                                        <p className="font-semibold mt-0.5" style={{ color: '#3F4450' }}>{fmt(asset.monthlyAmortizationRate)}/mo</p>
-                                                    </div>
-                                                    <div>
-                                                        <p style={{ color: '#A4A9B6' }}>Useful Life</p>
-                                                        <p className="font-semibold mt-0.5" style={{ color: '#3F4450' }}>{asset.usefulLifeMonths} months</p>
-                                                    </div>
-                                                    <div>
-                                                        <p style={{ color: '#A4A9B6' }}>Portfolio Share</p>
-                                                        <p className="font-semibold mt-0.5" style={{ color: '#3F4450' }}>{pct(asset.portfolioShare)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p style={{ color: '#A4A9B6' }}>ASU 2025-06</p>
-                                                        <p className="mt-0.5">
-                                                            {asset.mgmtAuthorized && asset.probableToComplete ? '✅ Compliant' : '⚠️ Incomplete'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
+                                </tr>
                             );
                         })}
                     </tbody>
                 </table>
             </div>
+
+            <AssetDrawer asset={drawerAsset} onClose={() => setDrawerAsset(null)} />
         </div>
     );
 }
