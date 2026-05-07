@@ -131,6 +131,35 @@ export default function Step2Jira() {
         carryForwardUnexpected: tickets.filter(t => t.bucket === 'carryForwardUnexpected').length,
     }), [tickets]);
 
+    // ── Date-aware column filtering (same as standalone import page) ──────
+    // ISO timestamps are unique per ticket, making the unique-values list
+    // useless. Detect date-shaped columns and bucket their filter keys to
+    // YYYY-MM, then render a Year → Month tree in the dropdown.
+    const isIsoDate = (v: string): boolean => /^\d{4}-\d{2}-\d{2}/.test(v);
+    const yearMonth = (v: string): string => v.slice(0, 7);
+
+    const dateColumns = useMemo(() => {
+        const result = new Set<string>();
+        for (const col of customFieldsConfig) {
+            let dateCount = 0;
+            let totalCount = 0;
+            for (const t of tickets) {
+                const raw = t.customFields?.[col.name];
+                if (raw == null || raw === '') continue;
+                totalCount++;
+                if (isIsoDate(String(raw))) dateCount++;
+            }
+            if (totalCount > 0 && dateCount / totalCount >= 0.6) result.add(col.name);
+        }
+        return result;
+    }, [tickets, customFieldsConfig]);
+
+    const cellFilterKey = (colName: string, raw: string): string => {
+        if (raw === '(Blank)') return '(Blank)';
+        if (dateColumns.has(colName) && isIsoDate(raw)) return yearMonth(raw);
+        return raw;
+    };
+
     const filteredTickets = useMemo(() => {
         let rows = tickets;
         if (bucketFilter !== 'all') {
@@ -139,16 +168,20 @@ export default function Step2Jira() {
         if (Object.keys(columnFilters).length === 0) return rows;
         return rows.filter(t => {
             for (const [colName, allowed] of Object.entries(columnFilters)) {
-                const val = (t.customFields?.[colName] || '(Blank)').toString();
-                if (!allowed.has(val)) return false;
+                const raw = (t.customFields?.[colName] || '(Blank)').toString();
+                const key = cellFilterKey(colName, raw);
+                if (!allowed.has(key)) return false;
             }
             return true;
         });
-    }, [tickets, bucketFilter, columnFilters]);
+    }, [tickets, bucketFilter, columnFilters, dateColumns]);
 
     const getUniqueValuesForCol = (colName: string): string[] => {
         const vals = new Set<string>();
-        tickets.forEach(t => vals.add((t.customFields?.[colName] || '(Blank)').toString()));
+        tickets.forEach(t => {
+            const raw = (t.customFields?.[colName] || '(Blank)').toString();
+            vals.add(cellFilterKey(colName, raw));
+        });
         return Array.from(vals).sort();
     };
 
@@ -531,16 +564,75 @@ export default function Step2Jira() {
                                                                     <button onClick={() => clearFilter(col.name)} className="text-[10px] hover:underline" style={{ color: '#717684' }}>Clear</button>
                                                                 </div>
                                                             </div>
-                                                            <div className="max-h-48 overflow-y-auto space-y-1">
-                                                                {uniqueVals.map(v => {
-                                                                    const isChecked = !columnFilters[col.name] || columnFilters[col.name].has(v);
+                                                            <div className="max-h-64 overflow-y-auto space-y-1">
+                                                                {dateColumns.has(col.name) ? (() => {
+                                                                    const blankSelected = !columnFilters[col.name] || columnFilters[col.name].has('(Blank)');
+                                                                    const dateKeys = uniqueVals.filter(v => v !== '(Blank)').sort().reverse();
+                                                                    const byYear: Record<string, string[]> = {};
+                                                                    for (const ym of dateKeys) {
+                                                                        const yr = ym.slice(0, 4);
+                                                                        if (!byYear[yr]) byYear[yr] = [];
+                                                                        byYear[yr].push(ym);
+                                                                    }
+                                                                    const yearKeys = Object.keys(byYear).sort().reverse();
+                                                                    const isMonthChecked = (m: string) => !columnFilters[col.name] || columnFilters[col.name].has(m);
+                                                                    const yearAllChecked = (yr: string) => byYear[yr].every(m => isMonthChecked(m));
+                                                                    const toggleYear = (yr: string) => {
+                                                                        setColumnFilters(prev => {
+                                                                            const next = { ...prev };
+                                                                            const all = getUniqueValuesForCol(col.name);
+                                                                            const current = new Set(next[col.name] || all);
+                                                                            const yearMonths = byYear[yr];
+                                                                            const allOn = yearMonths.every(m => current.has(m));
+                                                                            if (allOn) yearMonths.forEach(m => current.delete(m));
+                                                                            else yearMonths.forEach(m => current.add(m));
+                                                                            if (current.size === all.length) delete next[col.name];
+                                                                            else next[col.name] = current;
+                                                                            return next;
+                                                                        });
+                                                                    };
+                                                                    const monthName = (mm: string) => MONTH_NAMES[parseInt(mm, 10) - 1] ?? mm;
                                                                     return (
-                                                                        <label key={v} className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
-                                                                            <input type="checkbox" className="mt-0.5" checked={isChecked} onChange={() => handleFilterToggle(col.name, v)} />
-                                                                            <span className="truncate" style={{ color: '#3F4450' }} title={v}>{v}</span>
-                                                                        </label>
+                                                                        <>
+                                                                            {uniqueVals.includes('(Blank)') && (
+                                                                                <label className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
+                                                                                    <input type="checkbox" className="mt-0.5" checked={blankSelected} onChange={() => handleFilterToggle(col.name, '(Blank)')} />
+                                                                                    <span style={{ color: '#717684', fontStyle: 'italic' }}>(Blank)</span>
+                                                                                </label>
+                                                                            )}
+                                                                            {yearKeys.map(yr => (
+                                                                                <div key={yr}>
+                                                                                    <label className="flex items-center gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none font-semibold">
+                                                                                        <input type="checkbox" checked={yearAllChecked(yr)} onChange={() => toggleYear(yr)} />
+                                                                                        <span style={{ color: '#3F4450' }}>{yr}</span>
+                                                                                        <span className="ml-auto text-[10px]" style={{ color: '#A4A9B6' }}>{byYear[yr].length} mo</span>
+                                                                                    </label>
+                                                                                    <div className="ml-5 border-l border-gray-200 pl-2">
+                                                                                        {byYear[yr].map(ym => {
+                                                                                            const mm = ym.slice(5, 7);
+                                                                                            return (
+                                                                                                <label key={ym} className="flex items-center gap-2 text-xs cursor-pointer p-0.5 hover:bg-gray-50 rounded select-none">
+                                                                                                    <input type="checkbox" checked={isMonthChecked(ym)} onChange={() => handleFilterToggle(col.name, ym)} />
+                                                                                                    <span style={{ color: '#3F4450' }}>{monthName(mm)}</span>
+                                                                                                </label>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </>
                                                                     );
-                                                                })}
+                                                                })() : (
+                                                                    uniqueVals.map(v => {
+                                                                        const isChecked = !columnFilters[col.name] || columnFilters[col.name].has(v);
+                                                                        return (
+                                                                            <label key={v} className="flex items-start gap-2 text-xs cursor-pointer p-1 hover:bg-gray-50 rounded select-none">
+                                                                                <input type="checkbox" className="mt-0.5" checked={isChecked} onChange={() => handleFilterToggle(col.name, v)} />
+                                                                                <span className="truncate" style={{ color: '#3F4450' }} title={v}>{v}</span>
+                                                                            </label>
+                                                                        );
+                                                                    })
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </>
