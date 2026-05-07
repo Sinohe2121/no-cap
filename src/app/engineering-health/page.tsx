@@ -114,28 +114,30 @@ export default function EngineeringHealthPage() {
 
     return (
         <div>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <Link href="/dashboard" className="flex items-center gap-1 text-xs font-semibold mb-2 no-underline" style={{ color: 'var(--gem)' }}>
-                        <ArrowLeft className="w-3 h-3" /> Dashboard
-                    </Link>
-                    <h1 className="section-header flex items-center gap-2">
-                        <Activity className="w-5 h-5" style={{ color: 'var(--gem)' }} />
-                        Engineering Health
-                    </h1>
-                    <p className="section-subtext">Bug vs. feature distribution, cycle time, velocity trends, and cost attribution</p>
-                </div>
+            {/* Header — eyebrow + h1 + description per Variation A title pattern */}
+            <div className="mb-6">
+                <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs font-semibold mb-3 no-underline hover:underline" style={{ color: 'var(--envoy-red)' }}>
+                    <ArrowLeft className="w-3 h-3" /> Dashboard
+                </Link>
+                <p className="eyebrow" style={{ color: 'var(--envoy-red)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                    Team Performance
+                </p>
+                <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--fg-1)' }}>
+                    Engineering Health
+                </h1>
+                <p style={{ fontSize: 14, color: 'var(--fg-2)', marginTop: 6, maxWidth: 720 }}>
+                    Bug vs. feature distribution, cycle time, velocity trends, and cost attribution.
+                </p>
             </div>
 
-            {/* ── KPI Row ── */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-                <KPI icon={<Code2 className="w-4 h-4" />} label="Total Story Points" value={fmtNum(s.totalStoryPoints)} color="var(--gem)" />
+            {/* KPI strip — Variation A divided cells */}
+            <div className="kpi-strip mb-6" style={{ flexWrap: 'wrap' }}>
+                <KPI icon={<Code2 className="w-4 h-4" />} label="Total Story Points" value={fmtNum(s.totalStoryPoints)} color="var(--fg-1)" />
                 <KPI icon={<Bug className="w-4 h-4" />} label="Bug Ratio" value={`${fmtPct(s.bugRatio)}%`} color="var(--envoy-red)" subtitle={`${fmtBugs(s.bugStoryPoints)} SP on bugs`} />
-                <KPI icon={<TrendingUp className="w-4 h-4" />} label="Cap Ratio" value={`${fmtPct(s.capRatio)}%`} color="var(--cilantro)" subtitle={`${fmtNum(s.featureStoryPoints)} SP capitalized`} />
-                <KPI icon={<Clock className="w-4 h-4" />} label="Avg Cycle Time" value={`${fmtNum(s.avgCycleTimeDays, 1)}d`} color="var(--amber)" subtitle={`Median: ${fmtNum(s.medianCycleTimeDays)}d`} />
+                <KPI icon={<TrendingUp className="w-4 h-4" />} label="Cap Ratio" value={`${fmtPct(s.capRatio)}%`} color="var(--envoy-cilantro)" subtitle={`${fmtNum(s.featureStoryPoints)} SP capitalized`} />
+                <KPI icon={<Clock className="w-4 h-4" />} label="Avg Cycle Time" value={`${fmtNum(s.avgCycleTimeDays, 1)}d`} color="var(--fg-1)" subtitle={`Median: ${fmtNum(s.medianCycleTimeDays)}d`} />
                 <KPI icon={<DollarSign className="w-4 h-4" />} label="Bug Cost" value={fmt(s.totalBugCost)} color="var(--envoy-red)" subtitle="Est. dollars on bugs" />
-                <KPI icon={<Users className="w-4 h-4" />} label="Active Devs" value={s.activeDevelopers.toString()} color="var(--gem)" subtitle={`${fmtNum(s.totalTickets)} tickets`} />
+                <KPI icon={<Users className="w-4 h-4" />} label="Active Devs" value={s.activeDevelopers.toString()} color="var(--fg-1)" subtitle={`${fmtNum(s.totalTickets)} tickets`} />
             </div>
 
             {/* ── Row 1: Bug vs Feature + Cycle Time ── */}
@@ -144,10 +146,10 @@ export default function EngineeringHealthPage() {
                 <div className="glass-card p-6">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>Bug vs. Feature Distribution</p>
-                            <p className="text-[11px] mt-0.5" style={{ color: '#A4A9B6' }}>Story points by type — 12-month trend</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Bug vs. Feature Distribution</p>
+                            <p style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 2 }}>Story points by type — 12-month trend</p>
                         </div>
-                        <div className="flex items-center gap-4 text-[10px]" style={{ color: '#A4A9B6' }}>
+                        <div className="flex items-center gap-4 text-[10px]" style={{ color: 'var(--fg-3)' }}>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ background: CHART_SEMANTIC.capitalized, display: 'inline-block' }} /> Features</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ background: CHART_SEMANTIC.bugs, display: 'inline-block' }} /> Bugs</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ background: CHART_SEMANTIC.tasks, display: 'inline-block' }} /> Tasks</span>
@@ -169,8 +171,8 @@ export default function EngineeringHealthPage() {
                 {/* Cycle Time Histogram */}
                 <div className="glass-card p-6">
                     <div className="mb-4">
-                        <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>Cycle Time Distribution</p>
-                        <p className="text-[11px] mt-0.5" style={{ color: '#A4A9B6' }}>Days from creation to resolution — all resolved tickets</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Cycle Time Distribution</p>
+                        <p style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 2 }}>Days from creation to resolution — all resolved tickets</p>
                     </div>
                     <ResponsiveContainer width="100%" height={280}>
                         <BarChart data={cycleTimeBuckets} barCategoryGap="20%">
@@ -190,20 +192,20 @@ export default function EngineeringHealthPage() {
             {/* ── Row 2: Developer Effort Heatmap ── */}
             <div className="glass-card p-6 mb-6">
                 <div className="mb-4">
-                    <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>Developer Effort Attribution</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: '#A4A9B6' }}>Story point distribution by developer × project — intensity shows % of total effort</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Developer Effort Attribution</p>
+                    <p style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 2 }}>Story point distribution by developer × project — intensity shows % of total effort</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm" style={{ borderCollapse: 'separate', borderSpacing: '3px' }}>
                         <thead>
                             <tr>
-                                <th className="text-left text-[11px] font-semibold px-3 py-2" style={{ color: '#717684' }}>Developer</th>
+                                <th className="text-left text-[11px] font-semibold px-3 py-2" style={{ color: 'var(--fg-2)' }}>Developer</th>
                                 {topProjects.map(p => (
-                                    <th key={p.id} className="text-center text-[10px] font-bold uppercase tracking-wider px-2 py-2" style={{ color: '#717684', maxWidth: 100 }}>
+                                    <th key={p.id} className="text-center text-[10px] font-bold uppercase tracking-wider px-2 py-2" style={{ color: 'var(--fg-2)', maxWidth: 100 }}>
                                         {p.name.length > 14 ? p.name.slice(0, 14) + '…' : p.name}
                                     </th>
                                 ))}
-                                <th className="text-center text-[10px] font-bold uppercase tracking-wider px-2 py-2" style={{ color: '#717684' }}>Bugs</th>
+                                <th className="text-center text-[10px] font-bold uppercase tracking-wider px-2 py-2" style={{ color: 'var(--fg-2)' }}>Bugs</th>
                                 <th className="text-center text-[10px] font-bold uppercase tracking-wider px-2 py-2" style={{ color: '#21944E' }}>Cap Ratio</th>
                             </tr>
                         </thead>
@@ -211,10 +213,10 @@ export default function EngineeringHealthPage() {
                             {heatmap.map(dev => (
                                 <tr key={dev.developer.id}>
                                     <td className="px-3 py-2">
-                                        <Link href={`/developers/${dev.developer.id}`} className="text-sm font-semibold no-underline" style={{ color: '#3F4450' }}>
+                                        <Link href={`/developers/${dev.developer.id}`} className="text-sm font-semibold no-underline" style={{ color: 'var(--fg-1)' }}>
                                             {dev.developer.name}
                                         </Link>
-                                        <span className="text-[10px] ml-2" style={{ color: '#A4A9B6' }}>{fmtNum(dev.totalPoints, 1)} SP</span>
+                                        <span className="text-[10px] ml-2" style={{ color: 'var(--fg-3)' }}>{fmtNum(dev.totalPoints, 1)} SP</span>
                                     </td>
                                     {topProjects.map(tp => {
                                         const match = dev.projects.find(p => p.projectId === tp.id);
@@ -272,31 +274,31 @@ export default function EngineeringHealthPage() {
             {/* ── Row 3: Top 10 Most Expensive Tickets ── */}
             <div className="glass-card p-6">
                 <div className="mb-4">
-                    <p className="text-sm font-semibold" style={{ color: '#3F4450' }}>Top 10 Most Expensive Tickets</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: '#A4A9B6' }}>Estimated cost based on developer loaded rate × story points</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Top 10 Most Expensive Tickets</p>
+                    <p style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 2 }}>Estimated cost based on developer loaded rate × story points</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr style={{ borderBottom: '2px solid #E2E4E9' }}>
-                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Ticket</th>
-                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Summary</th>
-                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Type</th>
-                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Developer</th>
-                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Project</th>
-                                <th className="text-right py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>SP</th>
-                                <th className="text-right py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Est. Cost</th>
-                                <th className="text-center py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: '#717684' }}>Class</th>
+                            <tr style={{ borderBottom: '2px solid var(--border-subtle)' }}>
+                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Ticket</th>
+                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Summary</th>
+                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Type</th>
+                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Developer</th>
+                                <th className="text-left py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Project</th>
+                                <th className="text-right py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>SP</th>
+                                <th className="text-right py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Est. Cost</th>
+                                <th className="text-center py-2.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--fg-2)' }}>Class</th>
                             </tr>
                         </thead>
                         <tbody>
                             {topExpensiveTickets.map((t, i) => (
-                                <tr key={t.ticketId} style={{ borderBottom: '1px solid #F0F0F5' }}>
+                                <tr key={t.ticketId} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                     <td className="py-2.5">
                                         <JiraTicketLink ticketId={t.ticketId} className="text-xs" style={{ color: 'var(--gem)', fontWeight: 700 }} />
                                     </td>
                                     <td className="py-2.5 pr-4" style={{ maxWidth: 260 }}>
-                                        <span className="text-xs" style={{ color: '#3F4450' }}>{t.summary.length > 50 ? t.summary.slice(0, 50) + '…' : t.summary}</span>
+                                        <span className="text-xs" style={{ color: 'var(--fg-1)' }}>{t.summary.length > 50 ? t.summary.slice(0, 50) + '…' : t.summary}</span>
                                     </td>
                                     <td className="py-2.5">
                                         <span
@@ -309,9 +311,9 @@ export default function EngineeringHealthPage() {
                                             {t.issueType}
                                         </span>
                                     </td>
-                                    <td className="py-2.5 text-xs" style={{ color: '#717684' }}>{t.developer}</td>
-                                    <td className="py-2.5 text-xs" style={{ color: '#717684' }}>{t.project}</td>
-                                    <td className="py-2.5 text-right text-xs font-semibold" style={{ color: '#3F4450' }}>{t.storyPoints}</td>
+                                    <td className="py-2.5 text-xs" style={{ color: 'var(--fg-2)' }}>{t.developer}</td>
+                                    <td className="py-2.5 text-xs" style={{ color: 'var(--fg-2)' }}>{t.project}</td>
+                                    <td className="py-2.5 text-right text-xs font-semibold" style={{ color: 'var(--fg-1)' }}>{t.storyPoints}</td>
                                     <td className="py-2.5 text-right text-xs font-bold" style={{ color: 'var(--gem)' }}>{fmt(t.estimatedCost)}</td>
                                     <td className="py-2.5 text-center">
                                         <span
@@ -328,7 +330,7 @@ export default function EngineeringHealthPage() {
                             ))}
                             {topExpensiveTickets.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-8 text-sm" style={{ color: '#A4A9B6' }}>
+                                    <td colSpan={8} className="text-center py-8 text-sm" style={{ color: 'var(--fg-3)' }}>
                                         No ticket cost data available for this period. Ensure payroll and tickets are imported.
                                     </td>
                                 </tr>
@@ -341,18 +343,20 @@ export default function EngineeringHealthPage() {
     );
 }
 
-/* ─── KPI Card ──────────────────────────────────────────────────── */
+/* ─── KPI Cell — renders inside .kpi-strip per Variation A ─────── */
 function KPI({ icon, label, value, color, subtitle }: { icon: React.ReactNode; label: string; value: string; color: string; subtitle?: string }) {
     return (
-        <div className="glass-card p-4 flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}15`, color }}>
+        <div className="kpi-cell" style={{ minWidth: 160 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ display: 'inline-flex', width: 18, height: 18, alignItems: 'center', justifyContent: 'center', color: 'var(--fg-2)' }}>
                     {icon}
-                </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#A4A9B6' }}>{label}</span>
+                </span>
+                <span className="eyebrow">{label}</span>
             </div>
-            <span className="text-xl font-bold" style={{ color: '#3F4450' }}>{value}</span>
-            {subtitle && <span className="text-[11px]" style={{ color: '#A4A9B6' }}>{subtitle}</span>}
+            <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+                {value}
+            </p>
+            {subtitle && <p style={{ fontSize: 11, color: 'var(--fg-2)', marginTop: 2 }}>{subtitle}</p>}
         </div>
     );
 }
