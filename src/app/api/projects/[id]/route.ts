@@ -19,6 +19,13 @@ export async function GET(
                         summary: true,
                         storyPoints: true,
                         resolutionDate: true,
+                        // createdAt + customFields fuel the per-engineer activity
+                        // heatmap on the Reports asset drawer. Jira "Created"
+                        // (when present in customFields) is preferred over the
+                        // DB row's createdAt because the latter is the import
+                        // timestamp, not the work timestamp.
+                        createdAt: true,
+                        customFields: true,
                         assigneeId: true,
                         assignee: { select: { id: true, name: true, role: true } },
                     },

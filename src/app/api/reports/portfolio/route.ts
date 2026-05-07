@@ -43,6 +43,7 @@ export async function GET(request: Request) {
             // entries (the same source the Roll-Forward and Projects pages use)
             // so the three views can never disagree.
             let postedCapThroughEnd = 0;
+            let postedCapInWindow = 0;
             let postedAmortThroughEnd = 0;
             let postedAmortInWindow = 0;
 
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
                 if (idx > endIdx) continue;
                 if (je.entryType === ENTRY_TYPES.CAPITALIZATION) {
                     postedCapThroughEnd += je.amount;
+                    if (idx >= startIdx) postedCapInWindow += je.amount;
                 } else if (je.entryType === ENTRY_TYPES.AMORTIZATION) {
                     postedAmortThroughEnd += je.amount;
                     if (idx >= startIdx) postedAmortInWindow += je.amount;
@@ -102,6 +104,7 @@ export async function GET(request: Request) {
                 probableToComplete: p.probableToComplete,
                 fullyAmortized,
                 ticketCount: p._count.tickets,
+                capThisPeriod: postedCapInWindow,
             };
         });
 
