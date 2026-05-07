@@ -40,6 +40,59 @@ function periodSortKey(period: string): number {
     return year * 100 + (monthIdx + 1);
 }
 
+/** RFC-4180 CSV cell escaping. Wraps in quotes when the value contains
+ *  comma / quote / newline, doubling internal quotes. */
+function csvCell(val: unknown): string {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+}
+
+/** Resolve the displayed value for a given column on a ticket, mirroring
+ *  the fallback chain the table uses so the CSV matches what's on screen. */
+function resolveCellValue(ticket: TicketData, col: { id: string; name: string }): string {
+    let val: unknown = ticket.customFields?.[col.name];
+    if (!val) {
+        if (col.id === 'issuekey') val = ticket.ticketId;
+        else if (col.id === 'issuetype') val = ticket.issueType;
+        else if (col.id === 'summary') val = ticket.summary;
+        else if (col.id === 'customfield_10115' || col.id === 'customfield_10016' || col.id === 'customfield_10014') val = String(ticket.storyPoints);
+        else if (col.id === 'assignee') val = ticket.assignee?.name;
+    }
+    return val == null ? '' : String(val);
+}
+
+/** Build a CSV from a period's tickets and trigger a browser download. */
+function downloadPeriodCSV(
+    period: string,
+    tickets: TicketData[],
+    customFieldsConfig: { id: string; name: string }[],
+) {
+    const headers = [...customFieldsConfig.map((c) => c.name), 'Allocated Cost'];
+    const rows = tickets.map((t) => {
+        const cells = customFieldsConfig.map((col) => resolveCellValue(t, col));
+        cells.push(t.allocatedCost != null ? t.allocatedCost.toFixed(2) : '');
+        return cells;
+    });
+    // Prepend BOM so Excel auto-detects UTF-8 (otherwise non-ASCII characters
+    // in summaries / names render as mojibake).
+    const csv = '﻿' + [headers, ...rows]
+        .map((row) => row.map(csvCell).join(','))
+        .join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `project-details-${period.replace(/\s+/g, '-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 export default function ProjectDetailsPage() {
     const router = useRouter();
     const [tickets, setTickets] = useState<TicketData[]>([]);
@@ -120,38 +173,65 @@ export default function ProjectDetailsPage() {
 
                     return (
                         <Card key={period} className="overflow-hidden">
-                            {/* Collapsible header */}
-                            <button
-                                onClick={() => togglePeriod(period)}
-                                className="w-full flex items-center justify-between p-5 text-left transition-colors"
+                            {/* Period header — left side toggles collapse, right side has
+                                stats + a CSV download button as a sibling so clicking
+                                Download doesn't also collapse the table. */}
+                            <div
+                                className="w-full flex items-center justify-between p-5 transition-colors"
                                 style={{ background: 'transparent' }}
                                 onMouseEnter={(e) => (e.currentTarget.style.background = '#FAFBFC')}
                                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                             >
-                                <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => togglePeriod(period)}
+                                    className="flex items-center gap-3 text-left bg-transparent border-0 cursor-pointer p-0"
+                                    style={{ font: 'inherit' }}
+                                >
                                     {isCollapsed ? (
-                                        <ChevronRight className="w-4 h-4" style={{ color: '#A4A9B6' }} />
+                                        <ChevronRight className="w-4 h-4" style={{ color: 'var(--fg-3)' }} />
                                     ) : (
-                                        <ChevronDown className="w-4 h-4" style={{ color: '#4141A2' }} />
+                                        <ChevronDown className="w-4 h-4" style={{ color: 'var(--envoy-red)' }} />
                                     )}
-                                    <Ticket className="w-4 h-4" style={{ color: '#A4A9B6' }} />
-                                    <span className="text-sm font-bold" style={{ color: '#3F4450' }}>{period}</span>
-                                    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ background: '#F0EAF8', color: '#4141A2' }}>
+                                    <Ticket className="w-4 h-4" style={{ color: 'var(--fg-3)' }} />
+                                    <span className="text-sm font-bold" style={{ color: 'var(--fg-1)' }}>{period}</span>
+                                    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full" style={{ background: '#FFEFEE', color: 'var(--envoy-red)' }}>
                                         {groupTickets.length} tickets
                                     </span>
-                                </div>
+                                </button>
                                 <div className="flex items-center gap-4">
-                                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                                        <span className="font-semibold" style={{ color: '#4141A2' }}>{totalSP}</span> SP
+                                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
+                                        <span className="font-semibold" style={{ color: 'var(--fg-1)' }}>{totalSP}</span> SP
                                     </span>
-                                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                                        <span className="font-semibold" style={{ color: '#21944E' }}>{storyCount}</span> stories
+                                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
+                                        <span className="font-semibold" style={{ color: 'var(--envoy-cilantro)' }}>{storyCount}</span> stories
                                     </span>
-                                    <span className="text-xs" style={{ color: '#A4A9B6' }}>
-                                        <span className="font-semibold" style={{ color: '#FA4338' }}>{bugCount}</span> bugs
+                                    <span className="text-xs" style={{ color: 'var(--fg-3)' }}>
+                                        <span className="font-semibold" style={{ color: 'var(--envoy-red)' }}>{bugCount}</span> bugs
                                     </span>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            downloadPeriodCSV(period, groupTickets, customFieldsConfig);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                                        style={{ color: 'var(--fg-1)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = '#FFEFEE';
+                                            e.currentTarget.style.borderColor = 'rgba(250,67,56,0.25)';
+                                            e.currentTarget.style.color = 'var(--envoy-red)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'var(--bg-surface)';
+                                            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                                            e.currentTarget.style.color = 'var(--fg-1)';
+                                        }}
+                                        title={`Download ${period} as CSV (${groupTickets.length} tickets)`}
+                                    >
+                                        <Download className="w-3.5 h-3.5" />
+                                        CSV
+                                    </button>
                                 </div>
-                            </button>
+                            </div>
 
                             {/* Table body */}
                             {!isCollapsed && (
