@@ -1,10 +1,13 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions, requireAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { handleApiError } from '@/lib/apiError';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = prisma as any;
+
+const PROMPT_CONFIG_KEY = 'flux_analysis_prompt';
 
 const PROVIDER_DEFAULTS: Record<string, string> = {
     openai:    'gpt-4o',
@@ -173,4 +176,41 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ commentary });
+}
+
+// ─── Saved-prompt persistence ────────────────────────────────────────────────
+export async function GET() {
+    try {
+        const cfg = await prisma.globalConfig.findUnique({ where: { key: PROMPT_CONFIG_KEY } });
+        return NextResponse.json({ prompt: cfg?.value ?? null });
+    } catch (error) {
+        return handleApiError(error, 'Failed to load saved prompt');
+    }
+}
+
+export async function PUT(req: NextRequest) {
+    try {
+        const auth = await requireAdmin(req);
+        if (auth instanceof NextResponse) return auth;
+
+        const body = await req.json();
+        const prompt = typeof body?.prompt === 'string' ? body.prompt : null;
+        if (!prompt || prompt.trim().length < 10) {
+            return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
+        }
+
+        await prisma.globalConfig.upsert({
+            where: { key: PROMPT_CONFIG_KEY },
+            update: { value: prompt },
+            create: {
+                key: PROMPT_CONFIG_KEY,
+                value: prompt,
+                label: 'Flux Analysis LLM Prompt',
+            },
+        });
+
+        return NextResponse.json({ prompt });
+    } catch (error) {
+        return handleApiError(error, 'Failed to save prompt');
+    }
 }

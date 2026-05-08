@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft, ArrowRight, Zap, RefreshCw,
@@ -227,12 +227,46 @@ export default function FluxAnalysisPage() {
     const [prompt,          setPrompt]          = useState(DEFAULT_FLUX_PROMPT);
     const [promptEditing,   setPromptEditing]   = useState(false);
     const [draftPrompt,     setDraftPrompt]     = useState(DEFAULT_FLUX_PROMPT);
+    const [promptSaving,    setPromptSaving]    = useState(false);
     const [llmLoading,      setLlmLoading]      = useState(false);
     const [llmError,        setLlmError]        = useState<string | null>(null);
     const [commentary,      setCommentary]      = useState<string | null>(null);
     const [promptCollapsed, setPromptCollapsed] = useState(true);
     const [copied,          setCopied]          = useState(false);
     const commentaryRef = useRef<HTMLDivElement>(null);
+
+    // Load saved prompt on mount; fall back to default if none saved.
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/reports/flux-analysis')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (cancelled || !d?.prompt) return;
+                setPrompt(d.prompt);
+                setDraftPrompt(d.prompt);
+            })
+            .catch(() => { /* keep default */ });
+        return () => { cancelled = true; };
+    }, []);
+
+    const savePrompt = async (next: string) => {
+        setPromptSaving(true);
+        try {
+            const res = await fetch('/api/reports/flux-analysis', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: next }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                alert(`Failed to save prompt: ${body?.error || res.statusText}`);
+                return false;
+            }
+            return true;
+        } finally {
+            setPromptSaving(false);
+        }
+    };
 
     // ── Validation ────────────────────────────────────────────────────────────
     const spanA = monthSpan(aStartY, aStartM, aEndY, aEndM);
@@ -544,9 +578,29 @@ export default function FluxAnalysisPage() {
                                                 style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, padding: '12px 14px', borderRadius: 8, border: '1.5px solid #D5DAFF', background: '#fff', color: '#3F4450', resize: 'vertical', outline: 'none', lineHeight: 1.6 }}
                                             />
                                             <div className="flex items-center gap-3 mt-3">
-                                                <button onClick={() => { setPrompt(draftPrompt); setPromptEditing(false); }} style={{ background: '#4141A2', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Save Prompt</button>
+                                                <button
+                                                    disabled={promptSaving}
+                                                    onClick={async () => {
+                                                        const ok = await savePrompt(draftPrompt);
+                                                        if (!ok) return;
+                                                        setPrompt(draftPrompt);
+                                                        setPromptEditing(false);
+                                                    }}
+                                                    style={{ background: '#4141A2', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 12, fontWeight: 700, cursor: promptSaving ? 'not-allowed' : 'pointer', opacity: promptSaving ? 0.6 : 1 }}
+                                                >{promptSaving ? 'Saving…' : 'Save Prompt'}</button>
                                                 <button onClick={() => { setDraftPrompt(prompt); setPromptEditing(false); }} style={{ background: '#F6F6F9', color: '#717684', border: '1px solid #E2E4E9', borderRadius: 8, padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                                                <button onClick={() => { setDraftPrompt(DEFAULT_FLUX_PROMPT); setPrompt(DEFAULT_FLUX_PROMPT); setPromptEditing(false); }} className="flex items-center gap-1.5" style={{ background: 'transparent', color: '#FA4338', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                                <button
+                                                    disabled={promptSaving}
+                                                    onClick={async () => {
+                                                        const ok = await savePrompt(DEFAULT_FLUX_PROMPT);
+                                                        if (!ok) return;
+                                                        setDraftPrompt(DEFAULT_FLUX_PROMPT);
+                                                        setPrompt(DEFAULT_FLUX_PROMPT);
+                                                        setPromptEditing(false);
+                                                    }}
+                                                    className="flex items-center gap-1.5"
+                                                    style={{ background: 'transparent', color: '#FA4338', border: 'none', fontSize: 12, fontWeight: 600, cursor: promptSaving ? 'not-allowed' : 'pointer', opacity: promptSaving ? 0.6 : 1 }}
+                                                >
                                                     <RotateCcw className="w-3.5 h-3.5" /> Revert to Default
                                                 </button>
                                             </div>
@@ -559,7 +613,17 @@ export default function FluxAnalysisPage() {
                                                     <Pencil className="w-3.5 h-3.5" /> Edit Prompt
                                                 </button>
                                                 {prompt !== DEFAULT_FLUX_PROMPT && (
-                                                    <button onClick={() => { setPrompt(DEFAULT_FLUX_PROMPT); setDraftPrompt(DEFAULT_FLUX_PROMPT); }} className="flex items-center gap-1.5" style={{ background: 'transparent', color: '#FA4338', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                                    <button
+                                                        disabled={promptSaving}
+                                                        onClick={async () => {
+                                                            const ok = await savePrompt(DEFAULT_FLUX_PROMPT);
+                                                            if (!ok) return;
+                                                            setPrompt(DEFAULT_FLUX_PROMPT);
+                                                            setDraftPrompt(DEFAULT_FLUX_PROMPT);
+                                                        }}
+                                                        className="flex items-center gap-1.5"
+                                                        style={{ background: 'transparent', color: '#FA4338', border: 'none', fontSize: 12, fontWeight: 600, cursor: promptSaving ? 'not-allowed' : 'pointer', opacity: promptSaving ? 0.6 : 1 }}
+                                                    >
                                                         <RotateCcw className="w-3.5 h-3.5" /> Revert to Default
                                                     </button>
                                                 )}
